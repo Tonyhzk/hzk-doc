@@ -1,7 +1,5 @@
 #==================== Custom ====================
 
-setup_claude_dir.py
-sync_rules_to_clinerules.py
 CLAUDE.md
 
 # 工作文件夹
@@ -14,7 +12,6 @@ CLAUDE.md
 0_Release/
 0_Backup/
 0_Reference/
-0_Backup/
 
 # 缓存文件夹
 .temp/
@@ -40,9 +37,6 @@ temp
 config.json
 *_config.json
 *.log
-
-# ==================== Reference ====================
-/0_Reference/
 
 # ==================== Python ====================
 # 虚拟环境
