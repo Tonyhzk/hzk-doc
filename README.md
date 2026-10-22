@@ -15,6 +15,11 @@
 ## 配置说明
 
 - `.gitignore` — 通用忽略规则
-- `CLAUDE.md` — Claude Code 项目配置
+- `CLAUDE.md` — 可直接复用的项目约定，按实际项目补充
+- `.claude/` — 指向本机共享配置的软链接
 - `VERSION` — 当前版本号
 - `CHANGELOG.md` — 更新日志
+
+## 使用方式
+
+新建个人项目时，先读取 `.claude/guides/personal-project.md`，按指南完成模板复制与初始化。初始化流程和个人通用维护习惯统一保存在该指南中，`CLAUDE.md` 仅保留通用项目约定和项目专属信息。
