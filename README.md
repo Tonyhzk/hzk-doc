@@ -12,7 +12,7 @@
 
 ## 构建与启动
 
-构建环境需要 Go 1.25 及以上、Node.js 24.12 及以上、npm 和 make。以下命令从项目根目录执行：
+构建环境需要 Go 1.27.3 及以上、Node.js 24.12 及以上、npm 和 make。以下命令从项目根目录执行：
 
 ```bash
 make -C src build
