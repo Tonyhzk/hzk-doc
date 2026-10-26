@@ -39,7 +39,14 @@ export HZK_DOC_ADMIN_PASSWORD
 ./0_Release/dev/hzk-doc --docs ./src/docs
 ```
 
-密码只从启动环境读取，不保存在文档目录中。会话在服务重启后失效。修改运行环境中的密码并重启服务即可更换密码。
+也可以将密码保存在公开文档目录之外的 UTF-8 文本文件中，例如 `data/admin-password`，文件中只写一行密码，不要加入 Git：
+
+```bash
+chmod 600 ./data/admin-password
+./0_Release/dev/hzk-doc --docs ./data/docs --admin-password-file ./data/admin-password
+```
+
+指定 `--admin-password-file` 时以文件为准，否则读取 `HZK_DOC_ADMIN_PASSWORD`。文件末尾的换行会被忽略；文件无法读取、为空或密码不足 12 个字符时拒绝启动，不会退回环境变量。密码在启动时读取，不写入文档数据库。修改密码文件或环境变量后重启服务即可生效，原登录会话随重启失效。
 
 后台允许编辑 Markdown、HTML 和纯文本。Office、PDF 和媒体文件通过上传维护，不提供浏览器内的 Office 编辑器。单个上传文件上限为 64 MiB，目录排序单独保存在文档根目录的 `.hzk-doc-order.json`，备份文档时应一起保留。
 
@@ -58,6 +65,7 @@ export HZK_DOC_ADMIN_PASSWORD
 | 参数 | 默认值 |
 | --- | --- |
 | `--docs` | `./docs` |
+| `--admin-password-file` | 未指定；读取 `HZK_DOC_ADMIN_PASSWORD` |
 | `--listen` | `127.0.0.1:0`，自动选择端口 |
 | `--name` | `hzk-doc` |
 | `--refresh` | `3s`，最小 `1s` |

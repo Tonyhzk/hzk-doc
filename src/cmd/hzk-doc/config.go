@@ -3,24 +3,46 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 )
 
 type options struct {
-	docs        string
-	listen      string
-	name        string
-	refresh     time.Duration
-	showVersion bool
-	migrateIDs  bool
+	docs         string
+	listen       string
+	name         string
+	refresh      time.Duration
+	showVersion  bool
+	migrateIDs   bool
+	passwordFile string
+}
+
+func readAdminPassword(filename string) (string, error) {
+	password := os.Getenv("HZK_DOC_ADMIN_PASSWORD")
+	if filename != "" {
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			return "", fmt.Errorf("读取管理员密码文件失败: %w", err)
+		}
+		password = strings.TrimRight(string(data), "\r\n")
+		if password == "" {
+			return "", errors.New("管理员密码文件不能为空")
+		}
+	}
+	if password != "" && len([]rune(password)) < 12 {
+		return "", errors.New("管理员密码至少需要 12 个字符")
+	}
+	return password, nil
 }
 
 func parseOptions(args []string, output io.Writer) (options, error) {
 	var cfg options
 	flags := flag.NewFlagSet("hzk-doc", flag.ContinueOnError)
 	flags.SetOutput(output)
+	flags.StringVar(&cfg.passwordFile, "admin-password-file", "", "管理员密码文件，指定后优先于环境变量")
 	flags.StringVar(&cfg.docs, "docs", "./docs", "文档目录")
 	flags.StringVar(&cfg.listen, "listen", "127.0.0.1:0", "监听地址，端口 0 表示自动选择")
 	flags.StringVar(&cfg.name, "name", "hzk-doc", "站点名称")

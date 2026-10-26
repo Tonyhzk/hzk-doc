@@ -40,9 +40,9 @@ func run(args []string) error {
 		fmt.Println(version)
 		return nil
 	}
-	password := os.Getenv("HZK_DOC_ADMIN_PASSWORD")
-	if password != "" && len([]rune(password)) < 12 {
-		return errors.New("HZK_DOC_ADMIN_PASSWORD 至少需要 12 个字符")
+	password, err := readAdminPassword(cfg.passwordFile)
+	if err != nil {
+		return err
 	}
 	store, err := catalog.Open(cfg.docs)
 	if err != nil {
