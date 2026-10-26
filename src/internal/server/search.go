@@ -23,6 +23,7 @@ var (
 )
 
 type SearchResult struct {
+	ID        string `json:"id"`
 	Path      string `json:"path"`
 	Title     string `json:"title"`
 	Directory string `json:"directory"`
@@ -291,6 +292,7 @@ func (index *searchIndex) search(rawQuery, rawScope string) ([]SearchResult, err
 		}
 
 		results = append(results, SearchResult{
+			ID:        doc.meta.ID,
 			Path:      doc.meta.Path,
 			Title:     doc.meta.Title,
 			Directory: doc.meta.Directory,

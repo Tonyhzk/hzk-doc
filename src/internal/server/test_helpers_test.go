@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -82,4 +83,39 @@ func findTreeFile(entries []TreeEntry, path string) (TreeEntry, bool) {
 		}
 	}
 	return TreeEntry{}, false
+}
+
+func treeDocumentIDs(t *testing.T, server *Server) map[string]string {
+	t.Helper()
+
+	recorder := request(server, http.MethodGet, "/api/tree")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("目录状态码 = %d，响应 = %s", recorder.Code, recorder.Body.String())
+	}
+	response := decodeJSON[struct {
+		Data []TreeEntry `json:"data"`
+	}](t, recorder)
+
+	ids := make(map[string]string)
+	var walk func([]TreeEntry)
+	walk = func(entries []TreeEntry) {
+		for _, entry := range entries {
+			if entry.Type == "folder" {
+				walk(entry.Children)
+				continue
+			}
+			ids[entry.Path] = entry.ID
+		}
+	}
+	walk(response.Data)
+	return ids
+}
+
+func documentIDFor(t *testing.T, server *Server, name string) string {
+	t.Helper()
+	id := treeDocumentIDs(t, server)[name]
+	if id == "" {
+		t.Fatalf("目录中没有文档 %q 的 ID", name)
+	}
+	return id
 }

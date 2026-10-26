@@ -2,7 +2,7 @@
 import DOMPurify from 'dompurify'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
-import { fileUrl } from '@/api/docs'
+import { documentFileUrl } from '@/api/docs'
 import type { DocumentData } from '@/api/types'
 import { kindLabel } from '@/lib/format'
 import {
@@ -32,7 +32,9 @@ const pptxStage = ref<HTMLDivElement | null>(null)
 let controller = new AbortController()
 let pptxHandle: PptxSandboxHandle | null = null
 
-const downloadHref = computed(() => fileUrl(props.document.path, true))
+const downloadHref = computed(() =>
+  documentFileUrl(props.document.id, true),
+)
 const typeLabel = computed(() => kindLabel(props.document.type))
 
 onMounted(() => {
@@ -56,7 +58,7 @@ async function load(): Promise<void> {
   sheets.value = []
 
   try {
-    const response = await fetch(fileUrl(props.document.path), { signal })
+    const response = await fetch(documentFileUrl(props.document.id), { signal })
     if (!response.ok) {
       throw new Error(`原文件读取失败（${response.status}）。`)
     }

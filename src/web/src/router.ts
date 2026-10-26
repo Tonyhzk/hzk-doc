@@ -29,7 +29,7 @@ const router = createRouter({
     if (to.hash) {
       return false
     }
-    if (to.path !== from.path || to.query.doc !== from.query.doc) {
+    if (to.path !== from.path || to.query.id !== from.query.id) {
       return { top: 0 }
     }
     return {}

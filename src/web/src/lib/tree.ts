@@ -22,12 +22,12 @@ export function countFolderDocuments(folder: TreeFolder): number {
 
 export function folderAncestors(
   entries: readonly TreeEntry[],
-  path: string,
+  id: string,
 ): string[] {
   function walk(nodes: readonly TreeEntry[], trail: string[]): string[] | null {
     for (const entry of nodes) {
       if (entry.type === 'file') {
-        if (entry.path === path) {
+        if (entry.id === id) {
           return trail
         }
         continue
@@ -42,6 +42,16 @@ export function folderAncestors(
   return walk(entries, []) ?? []
 }
 
+export function findFileByPath(
+  entries: readonly TreeEntry[],
+  path: string,
+): TreeFile | null {
+  if (!path) {
+    return null
+  }
+  return flattenFiles(entries).find((entry) => entry.path === path) ?? null
+}
+
 export interface DocumentNeighbors {
   previous: TreeFile | null
   next: TreeFile | null
@@ -49,10 +59,10 @@ export interface DocumentNeighbors {
 
 export function documentNeighbors(
   entries: readonly TreeEntry[],
-  path: string,
+  id: string,
 ): DocumentNeighbors {
   const files = flattenFiles(entries)
-  const index = files.findIndex((entry) => entry.path === path)
+  const index = files.findIndex((entry) => entry.id === id)
   if (index === -1) {
     return { previous: null, next: null }
   }

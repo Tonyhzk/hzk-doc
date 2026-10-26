@@ -27,6 +27,7 @@ import {
   isMarkdownPath,
   isTextPath,
 } from '@/lib/format'
+import { readingLocation } from '@/lib/navigation'
 
 const props = defineProps<{
   path: string
@@ -53,6 +54,7 @@ const previewLoading = ref(false)
 const previewError = ref('')
 const pane = ref<'source' | 'preview'>('source')
 const confirmOpen = ref(false)
+const documentId = ref('')
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 let previewSequence = 0
 
@@ -109,6 +111,7 @@ async function loadSource(): Promise<void> {
   try {
     const source = await fetchSource(props.path)
     snapshot.value = createEditorSnapshot(source.content, source.revision)
+    documentId.value = source.id ?? ''
   } catch (cause) {
     if (cause instanceof AdminAuthError) {
       loadError.value = '登录已过期，请重新登录后重试。'
@@ -249,7 +252,10 @@ function confirmDiscard(): void {
 }
 
 function openReader(): void {
-  void router.push({ path: '/', query: { doc: props.path } })
+  if (!documentId.value) {
+    return
+  }
+  void router.push(readingLocation(documentId.value))
 }
 
 function retryPreview(): void {
@@ -308,7 +314,12 @@ async function insertTab(event: KeyboardEvent): Promise<void> {
         >
           {{ saving ? '保存中' : '保存' }}
         </button>
-        <button type="button" class="button button-quiet" @click="openReader">
+        <button
+          type="button"
+          class="button button-quiet"
+          :disabled="!documentId"
+          @click="openReader"
+        >
           阅读
         </button>
       </div>

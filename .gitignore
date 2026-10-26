@@ -15,6 +15,9 @@ CLAUDE.md
 
 # 本地文档数据
 /data/
+.hzk-doc.sqlite*
+.hzk-doc.lock
+.hzk-doc-trash/
 
 # 缓存文件夹
 .temp/

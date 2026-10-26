@@ -13,6 +13,7 @@ import {
   setAdminToken,
 } from '@/api/admin'
 import { AdminAuthError } from '@/api/http'
+import type { AdminRenameResult } from '@/api/types'
 import AdminBrowser from '@/components/admin/AdminBrowser.vue'
 import AdminEditor from '@/components/admin/AdminEditor.vue'
 import AdminLogin from '@/components/admin/AdminLogin.vue'
@@ -21,6 +22,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import ToastNotice from '@/components/ToastNotice.vue'
 import { useNotice } from '@/composables/useNotice'
+import { readingLocation } from '@/lib/navigation'
 import { useSiteStore } from '@/stores/site'
 
 type Phase = 'loading' | 'error' | 'disabled' | 'login' | 'ready'
@@ -189,8 +191,17 @@ function closeTrash(): void {
   void browserRef.value?.refresh()
 }
 
-function viewDocument(path: string): void {
-  void router.push({ path: '/', query: { doc: path } })
+function viewDocument(id: string): void {
+  void router.push(readingLocation(id))
+}
+
+function onRenamed(
+  result: AdminRenameResult,
+  previousPath: string,
+): void {
+  if (activePath.value === previousPath) {
+    activePath.value = result.path
+  }
 }
 
 function onSaved(): void {
@@ -309,6 +320,7 @@ function discardAndNavigate(): void {
           ref="browserRef"
           @edit="openEditor"
           @view="viewDocument"
+          @renamed="onRenamed"
           @notice="notify"
           @auth-expired="handleAuthExpired"
           @open-trash="openTrash"

@@ -12,7 +12,7 @@ export interface TreeFile {
   displayName: string
   fileType: string
   fileTypeCategory: string
-  id?: string
+  id: string
 }
 
 export type TreeEntry = TreeFolder | TreeFile
@@ -32,6 +32,7 @@ export interface TocItem {
 
 export interface DocumentData {
   type: string
+  id: string
   path: string
   title: string
   content?: string
@@ -40,12 +41,12 @@ export interface DocumentData {
   toc?: TocItem[]
   size?: number
   modifiedAt?: string
-  id?: string
 }
 
 export type SearchScope = 'title' | 'full'
 
 export interface SearchHit {
+  id: string
   path: string
   title: string
   directory: string
@@ -60,6 +61,7 @@ export interface AdminSession {
 }
 
 export interface AdminEntry {
+  id?: string
   name: string
   path: string
   type: 'folder' | 'file'
@@ -75,14 +77,21 @@ export interface AdminEntries {
 }
 
 export interface AdminSource {
+  id?: string
   path: string
   content: string
   revision: string
 }
 
 export interface AdminDocumentResult {
+  id?: string
   path: string
   revision: string
+}
+
+export interface AdminRenameResult {
+  id: string
+  path: string
 }
 
 export interface AdminOrderResult {
@@ -91,6 +100,7 @@ export interface AdminOrderResult {
 }
 
 export interface AdminUploadResult {
+  id?: string
   path: string
   size: number
 }

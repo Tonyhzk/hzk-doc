@@ -20,6 +20,7 @@ type TreeEntry struct {
 	Type             string      `json:"type"`
 	Name             string      `json:"name"`
 	Path             string      `json:"path"`
+	ID               string      `json:"id,omitempty"`
 	DisplayName      string      `json:"displayName,omitempty"`
 	FileType         string      `json:"fileType,omitempty"`
 	FileTypeCategory string      `json:"fileTypeCategory,omitempty"`
@@ -27,6 +28,7 @@ type TreeEntry struct {
 }
 
 type DocMeta struct {
+	ID        string
 	Path      string
 	Name      string
 	Title     string
@@ -46,6 +48,32 @@ func (s *Server) scanTree() ([]TreeEntry, map[string]DocMeta, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	names := make([]string, 0, len(docs))
+	for name := range docs {
+		names = append(names, name)
+	}
+	if err := s.catalog.Register(names); err != nil {
+		return nil, nil, err
+	}
+	active, err := s.catalog.Active()
+	if err != nil {
+		return nil, nil, err
+	}
+	for name, meta := range docs {
+		meta.ID = active[name].ID
+		docs[name] = meta
+	}
+	var assign func([]TreeEntry)
+	assign = func(entries []TreeEntry) {
+		for i := range entries {
+			if entries[i].Type == "file" {
+				entries[i].ID = docs[entries[i].Path].ID
+			} else {
+				assign(entries[i].Children)
+			}
+		}
+	}
+	assign(tree)
 	return tree, docs, nil
 }
 
@@ -76,6 +104,7 @@ func (s *Server) loadOrder() map[string][]string {
 		s.logger.Warn("解析排序文件失败", "error", err)
 		return nil
 	}
+	s.catalog.ResolveOrder(order)
 	return order
 }
 
@@ -105,7 +134,7 @@ func (s *Server) scanDir(dir string, docs map[string]DocMeta, order map[string][
 		}
 
 		if entry.IsDir() {
-			if name == "assets" {
+			if strings.EqualFold(name, "assets") {
 				continue
 			}
 			children, err := s.scanDir(relative, docs, order)

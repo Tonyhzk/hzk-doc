@@ -2,10 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 
 import { deleteEntry, fetchEntries, saveOrder } from '@/api/admin'
-import { fileUrl } from '@/api/docs'
+import { documentFileUrl, fileUrl } from '@/api/docs'
 import { AdminAuthError } from '@/api/http'
-import type { AdminEntry } from '@/api/types'
+import type { AdminEntry, AdminRenameResult } from '@/api/types'
 import AdminCreateDialog from '@/components/admin/AdminCreateDialog.vue'
+import AdminRenameDialog from '@/components/admin/AdminRenameDialog.vue'
 import AdminUploadDialog from '@/components/admin/AdminUploadDialog.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import {
@@ -22,7 +23,8 @@ import { pathTrail } from '@/lib/tree'
 
 const emit = defineEmits<{
   edit: [path: string]
-  view: [path: string]
+  view: [id: string]
+  renamed: [result: AdminRenameResult, previousPath: string]
   notice: [message: string]
   authExpired: []
   openTrash: []
@@ -39,12 +41,17 @@ const orderSaving = ref(false)
 const createOpen = ref(false)
 const createKind = ref<'document' | 'folder'>('document')
 const uploadOpen = ref(false)
+const renameOpen = ref(false)
+const renameTarget = ref<AdminEntry | null>(null)
 const deleteTarget = ref<AdminEntry | null>(null)
 const deleting = ref(false)
 
 const breadcrumbs = computed(() => pathTrail(directory.value))
 const displayEntries = computed(() =>
   orderMode.value ? orderedEntries.value : entries.value,
+)
+const assetDirectory = computed(() =>
+  directory.value.toLowerCase().split('/').includes('assets'),
 )
 let loadSequence = 0
 
@@ -117,6 +124,16 @@ function canDownloadEntry(entry: AdminEntry): boolean {
   )
 }
 
+function entryFileUrl(entry: AdminEntry, download = false): string {
+  return entry.id
+    ? documentFileUrl(entry.id, download)
+    : fileUrl(entry.path, download)
+}
+
+function canRenameEntry(entry: AdminEntry): boolean {
+  return entry.type === 'file' && Boolean(entry.id)
+}
+
 function startOrder(): void {
   if (entries.value.length < 2) {
     return
@@ -163,6 +180,9 @@ async function persistOrder(): Promise<void> {
 }
 
 function openCreate(kind: 'document' | 'folder'): void {
+  if (kind === 'document' && assetDirectory.value) {
+    return
+  }
   createKind.value = kind
   createOpen.value = true
 }
@@ -177,6 +197,25 @@ function onCreated(path: string): void {
 }
 
 function onUploaded(): void {
+  void load(directory.value)
+}
+
+function requestRename(entry: AdminEntry): void {
+  renameTarget.value = entry
+  renameOpen.value = true
+}
+
+function closeRename(): void {
+  renameOpen.value = false
+  renameTarget.value = null
+}
+
+function onRenamed(
+  result: AdminRenameResult,
+  previousPath: string,
+): void {
+  renameTarget.value = null
+  emit('renamed', result, previousPath)
   void load(directory.value)
 }
 
@@ -244,7 +283,8 @@ async function confirmDelete(): Promise<void> {
           <button
             type="button"
             class="button button-primary"
-            :disabled="loading"
+            :disabled="loading || assetDirectory"
+            :title="assetDirectory ? '素材目录不能新建文档' : undefined"
             @click="openCreate('document')"
           >
             新建文档
@@ -404,11 +444,11 @@ async function confirmDelete(): Promise<void> {
             </button>
             <template v-else>
               <button
-                v-if="entry.kind"
+                v-if="entry.id"
                 type="button"
                 class="button button-quiet"
                 :aria-label="`查看 ${entry.name}`"
-                @click="emit('view', entry.path)"
+                @click="emit('view', entry.id)"
               >
                 查看
               </button>
@@ -421,11 +461,20 @@ async function confirmDelete(): Promise<void> {
               >
                 编辑
               </button>
+              <button
+                v-if="canRenameEntry(entry)"
+                type="button"
+                class="button button-quiet"
+                :aria-label="`重命名 ${entry.name}`"
+                @click="requestRename(entry)"
+              >
+                改名
+              </button>
               <a
                 v-if="canDownloadEntry(entry)"
                 class="button button-quiet"
                 :aria-label="`下载 ${entry.name}`"
-                :href="fileUrl(entry.path, true)"
+                :href="entryFileUrl(entry, true)"
                 download
               >
                 下载
@@ -458,6 +507,14 @@ async function confirmDelete(): Promise<void> {
       :directory="directory"
       @close="uploadOpen = false"
       @uploaded="onUploaded"
+      @notice="emit('notice', $event)"
+      @auth-expired="emit('authExpired')"
+    />
+    <AdminRenameDialog
+      :open="renameOpen"
+      :entry="renameTarget"
+      @close="closeRename"
+      @renamed="onRenamed"
       @notice="emit('notice', $event)"
       @auth-expired="emit('authExpired')"
     />

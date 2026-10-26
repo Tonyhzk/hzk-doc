@@ -1,18 +1,43 @@
-export interface ResolvedDocLink {
+export interface ResolvedPathLink {
   path: string
   hash: string
 }
 
-export function parseDocParam(value: unknown): string {
+export interface ResolvedDocLink {
+  id: string
+  hash: string
+}
+
+export interface ReadingLocation {
+  path: string
+  query: { id: string }
+  hash: string
+}
+
+export interface DocumentTarget {
+  id?: string
+  path?: string
+  heading: string
+}
+
+export function parseIdParam(value: unknown): string {
   const raw = Array.isArray(value) ? value[0] : value
   if (typeof raw !== 'string') {
     return ''
   }
-  return raw.trim().replace(/^\/+/, '')
+  return raw.trim()
 }
 
-export function readingHref(path: string, heading = ''): string {
-  const query = new URLSearchParams({ doc: path }).toString()
+export function readingLocation(id: string, heading = ''): ReadingLocation {
+  return {
+    path: '/',
+    query: { id },
+    hash: heading ? `#${heading}` : '',
+  }
+}
+
+export function readingHref(id: string, heading = ''): string {
+  const query = new URLSearchParams({ id }).toString()
   const fragment = heading ? `#${encodeURIComponent(heading)}` : ''
   return `/?${query}${fragment}`
 }
@@ -68,7 +93,7 @@ function markdownExtension(path: string): boolean {
 export function resolveMarkdownHref(
   href: string,
   currentPath: string,
-): ResolvedDocLink | null {
+): ResolvedPathLink | null {
   const raw = href.trim()
   if (!raw || raw.startsWith('#') || raw.startsWith('//')) {
     return null
@@ -122,12 +147,12 @@ export function resolveViewerHref(
   if (target.origin !== base.origin || target.pathname !== '/') {
     return null
   }
-  const path = parseDocParam(target.searchParams.get('doc'))
-  if (!path) {
+  const id = parseIdParam(target.searchParams.get('id'))
+  if (!id) {
     return null
   }
   return {
-    path,
+    id,
     hash: decodeFragment(target.hash),
   }
 }

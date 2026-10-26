@@ -7,23 +7,23 @@ import { folderAncestors } from '@/lib/tree'
 
 const props = defineProps<{
   entries: TreeEntry[]
-  currentPath: string
+  currentId: string
 }>()
 
 const emit = defineEmits<{
-  select: [path: string]
+  select: [id: string]
 }>()
 
 const expanded = ref(new Set<string>())
 
 watch(
-  () => props.currentPath,
-  (path) => {
-    if (!path) {
+  () => props.currentId,
+  (id) => {
+    if (!id) {
       return
     }
     const next = new Set(expanded.value)
-    for (const folder of folderAncestors(props.entries, path)) {
+    for (const folder of folderAncestors(props.entries, id)) {
       next.add(folder)
     }
     expanded.value = next
@@ -34,11 +34,11 @@ watch(
 watch(
   () => props.entries,
   () => {
-    if (!props.currentPath) {
+    if (!props.currentId) {
       return
     }
     const next = new Set(expanded.value)
-    for (const folder of folderAncestors(props.entries, props.currentPath)) {
+    for (const folder of folderAncestors(props.entries, props.currentId)) {
       next.add(folder)
     }
     expanded.value = next
@@ -66,7 +66,7 @@ function toggle(path: string): void {
         :node="entry"
         :depth="0"
         :expanded="expanded"
-        :current-path="currentPath"
+        :current-id="currentId"
         @toggle="toggle"
         @select="emit('select', $event)"
       />

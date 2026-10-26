@@ -34,6 +34,7 @@ type TocItem struct {
 }
 
 type documentResponse struct {
+	ID         string    `json:"id"`
 	Type       string    `json:"type"`
 	Path       string    `json:"path"`
 	Title      string    `json:"title"`
@@ -113,19 +114,21 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relative, err := cleanRequestPath(r.URL.Query().Get("path"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "无效的文档路径")
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "缺少文档 ID")
 		return
 	}
 
-	meta, ok := current.docs[relative]
+	meta, ok := current.byID[id]
 	if !ok {
 		writeError(w, http.StatusNotFound, "文档不存在")
 		return
 	}
 
+	relative := meta.Path
 	response := documentResponse{
+		ID:         meta.ID,
 		Path:       relative,
 		Title:      meta.Title,
 		Toc:        make([]TocItem, 0),
@@ -147,21 +150,21 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response.Type = "markdown"
-		response.Content = rendered
+		response.Content = s.documentLinks(rendered, false)
 		response.RawContent = string(source)
 		response.Toc = toc
 	case "html", "htm":
 		response.Type = "html"
-		response.URL = "/view/html?path=" + url.QueryEscape(relative)
+		response.URL = "/view/html?id=" + url.QueryEscape(meta.ID)
 	case "pdf":
 		response.Type = "pdf"
-		response.URL = fileURL(relative)
+		response.URL = "/file?id=" + url.QueryEscape(meta.ID)
 	case "jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif":
 		response.Type = "image"
-		response.URL = fileURL(relative)
+		response.URL = "/file?id=" + url.QueryEscape(meta.ID)
 	case "docx", "xlsx", "pptx":
 		response.Type = meta.Extension
-		response.URL = fileURL(relative)
+		response.URL = "/file?id=" + url.QueryEscape(meta.ID)
 	case "txt":
 		source, err := s.readDocument(relative)
 		if err != nil {
@@ -170,13 +173,13 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		}
 		response.Type = "text"
 		response.RawContent = string(source)
-		response.URL = fileURL(relative)
+		response.URL = "/file?id=" + url.QueryEscape(meta.ID)
 	case "mp3", "wav", "ogg", "flac", "aac", "m4a", "oga":
 		response.Type = "audio"
-		response.URL = fileURL(relative)
+		response.URL = "/file?id=" + url.QueryEscape(meta.ID)
 	case "mp4", "webm", "mov", "m4v", "ogv":
 		response.Type = "video"
-		response.URL = fileURL(relative)
+		response.URL = "/file?id=" + url.QueryEscape(meta.ID)
 	default:
 		writeError(w, http.StatusUnsupportedMediaType, "不支持的文件类型")
 		return
@@ -209,9 +212,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
-	relative, err := cleanRequestPath(r.URL.Query().Get("path"))
+	relative, err := s.requestFilePath(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "无效的文件路径")
+		if errors.Is(err, os.ErrNotExist) {
+			writeError(w, http.StatusNotFound, "文档不存在")
+		} else {
+			writeError(w, http.StatusBadRequest, "无效的文件路径")
+		}
 		return
 	}
 	if !content.AllowedFile(relative) {
@@ -279,9 +286,13 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request, relative, mim
 }
 
 func (s *Server) handleHTML(w http.ResponseWriter, r *http.Request) {
-	relative, err := cleanRequestPath(r.URL.Query().Get("path"))
+	relative, err := s.requestFilePath(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "无效的文档路径")
+		if errors.Is(err, os.ErrNotExist) {
+			writeError(w, http.StatusNotFound, "文档不存在")
+		} else {
+			writeError(w, http.StatusBadRequest, "无效的文档路径")
+		}
 		return
 	}
 	extension := strings.ToLower(strings.TrimPrefix(path.Ext(relative), "."))
@@ -311,7 +322,7 @@ func (s *Server) handleHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Security-Policy", "sandbox")
-	_, _ = w.Write(rendered)
+	_, _ = io.WriteString(w, s.documentLinks(string(rendered), true))
 }
 
 func (s *Server) readDocument(relative string) ([]byte, error) {

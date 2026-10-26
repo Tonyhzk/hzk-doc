@@ -121,7 +121,7 @@ func TestTreeSkipsPathsRejectedByValidation(t *testing.T) {
 	}
 
 	for _, invalid := range []string{"a:b.md", " 前导.md", "dir /inside.md"} {
-		if status := request(server, http.MethodGet, "/api/doc?path="+url.QueryEscape(invalid)).Code; status != http.StatusBadRequest {
+		if status := request(server, http.MethodGet, "/file?path="+url.QueryEscape(invalid)).Code; status != http.StatusBadRequest {
 			t.Fatalf("%q 访问状态码 = %d，预期 400", invalid, status)
 		}
 	}
@@ -236,17 +236,21 @@ func TestMarkdownRenderingRewritesResourcesAndKeepsCode(t *testing.T) {
 		"<video controls src=\"media/video.mp4\"></video>\n\n" +
 		"[外链](https://example.com)\n\n" +
 		"[另一篇](other.md)\n\n" +
+		"[缺失](missing.md)\n\n" +
 		"[锚点](#标题)\n\n" +
 		"[恶意](javascript:alert(1))\n\n" +
 		"<script>alert('x')</script>\n\n" +
 		"```go\n  fmt.Println(\"x\")\n```\n"
 	writeTestFile(t, root, "guides/intro.md", []byte(source))
+	writeTestFile(t, root, "guides/other.md", []byte("# 另一篇"))
 	writeTestFile(t, root, "assets/pic.png", []byte("png"))
 	writeTestFile(t, root, "guides/images/pic.png", []byte("png"))
 	writeTestFile(t, root, "guides/media/video.mp4", []byte("video"))
 
 	server := newTestServer(t, root, nil)
-	recorder := request(server, http.MethodGet, "/api/doc?path=guides/intro.md")
+	introID := documentIDFor(t, server, "guides/intro.md")
+	otherID := documentIDFor(t, server, "guides/other.md")
+	recorder := request(server, http.MethodGet, "/api/doc?id="+url.QueryEscape(introID))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("状态码 = %d，响应 = %s", recorder.Code, recorder.Body.String())
 	}
@@ -258,6 +262,9 @@ func TestMarkdownRenderingRewritesResourcesAndKeepsCode(t *testing.T) {
 	if !response.Success || response.Data.Type != "markdown" {
 		t.Fatalf("响应 = %+v", response)
 	}
+	if response.Data.ID != introID || response.Data.Path != "guides/intro.md" {
+		t.Fatalf("文档标识 = %q/%q", response.Data.ID, response.Data.Path)
+	}
 	if response.Data.RawContent != source {
 		t.Fatalf("rawContent 被修改")
 	}
@@ -267,8 +274,9 @@ func TestMarkdownRenderingRewritesResourcesAndKeepsCode(t *testing.T) {
 		"/file?path=assets%2Fpic.png",
 		"/file?path=guides%2Fimages%2Fpic.png",
 		"/file?path=guides%2Fmedia%2Fvideo.mp4",
+		"/file?path=guides%2Fmissing.md",
 		"data:image/png;base64,iVBORw0KGgo=",
-		"/?doc=guides%2Fother.md",
+		"/?id=" + url.QueryEscape(otherID),
 		`target="_blank"`,
 		`rel="noopener noreferrer"`,
 		`href="#%E6%A0%87%E9%A2%98"`,
@@ -277,6 +285,9 @@ func TestMarkdownRenderingRewritesResourcesAndKeepsCode(t *testing.T) {
 		if !strings.Contains(html, want) {
 			t.Errorf("渲染结果缺少 %q:\n%s", want, html)
 		}
+	}
+	if strings.Contains(html, "doc=guides") {
+		t.Fatalf("未注册文档仍生成旧 ?doc 地址:\n%s", html)
 	}
 	if strings.Contains(html, "<script") || strings.Contains(html, "alert('x')") {
 		t.Fatalf("脚本未被清洗:\n%s", html)
@@ -314,13 +325,31 @@ func TestMarkdownHeadingIDsSupportChinese(t *testing.T) {
 }
 
 func TestPreviewMarkdownUsesDocumentDirectory(t *testing.T) {
-	server := newTestServer(t, t.TempDir(), nil)
-	rendered, err := server.PreviewMarkdown("guides/demo.md", "![图片](assets/pic.png)")
+	root := t.TempDir()
+	writeTestFile(t, root, "assets/pic.png", []byte("png"))
+	writeTestFile(t, root, "guides/other.md", []byte("# 其它"))
+	writeTestFile(t, root, "guides/demo.html", []byte("<html></html>"))
+	writeTestFile(t, root, "guides/manual.pdf", []byte("%PDF-1.4"))
+
+	server := newTestServer(t, root, nil)
+	ids := treeDocumentIDs(t, server)
+	rendered, err := server.PreviewMarkdown("guides/page.md", "![图片](assets/pic.png)\n\n[文档](other.md)\n\n[网页](demo.html)\n\n[文件](manual.pdf)\n\n[缺失](missing.md)\n")
 	if err != nil {
 		t.Fatalf("PreviewMarkdown 失败: %v", err)
 	}
 	if !strings.Contains(rendered, "/file?path=assets%2Fpic.png") {
 		t.Fatalf("预览未解析 assets: %s", rendered)
+	}
+	if !strings.Contains(rendered, "/file?path=guides%2Fmissing.md") || strings.Contains(rendered, "?doc=") {
+		t.Fatalf("预览未按真实路径处理缺失文档: %s", rendered)
+	}
+	for _, name := range []string{"guides/other.md", "guides/demo.html", "guides/manual.pdf"} {
+		if ids[name] == "" {
+			t.Fatalf("%s 缺少文档 ID", name)
+		}
+		if !strings.Contains(rendered, "/?id="+ids[name]) {
+			t.Errorf("预览链接缺少 %s 的 ID: %s", name, rendered)
+		}
 	}
 }
 
@@ -442,15 +471,15 @@ func TestPathValidationAndSymlinkEscape(t *testing.T) {
 
 	server := newTestServer(t, root, nil)
 	for _, target := range []string{
-		"/api/doc?path=../outside.md",
-		"/api/doc?path=%2e%2e%2Foutside.md",
-		"/api/doc?path=/etc/passwd",
-		"/api/doc?path=guides/../../outside.md",
-		"/api/doc?path=a/../b.md",
-		"/api/doc?path=.hidden.md",
-		"/api/doc?path=guides/.hidden.md",
-		"/api/doc?path=a//b.md",
-		"/api/doc?path=a%5Cb.md",
+		"/file?path=../outside.md",
+		"/file?path=%2e%2e%2Foutside.md",
+		"/file?path=/etc/passwd",
+		"/file?path=guides/../../outside.md",
+		"/file?path=a/../b.md",
+		"/file?path=.hidden.md",
+		"/file?path=guides/.hidden.md",
+		"/file?path=a//b.md",
+		"/file?path=a%5Cb.md",
 		"/file?path=../outside.png",
 		"/view/html?path=../outside.html",
 	} {
@@ -460,7 +489,17 @@ func TestPathValidationAndSymlinkEscape(t *testing.T) {
 		}
 	}
 
-	if recorder := request(server, http.MethodGet, "/api/doc?path=link.md"); recorder.Code != http.StatusNotFound {
+	for _, target := range []string{
+		"/api/doc?path=../outside.md",
+		"/api/doc?path=guides/ok.md",
+		"/api/doc?path=.hidden.md",
+	} {
+		if recorder := request(server, http.MethodGet, target); recorder.Code != http.StatusBadRequest {
+			t.Errorf("%s: 状态码 = %d，预期 400；响应 = %s", target, recorder.Code, recorder.Body.String())
+		}
+	}
+
+	if recorder := request(server, http.MethodGet, "/file?path=link.md"); recorder.Code != http.StatusNotFound {
 		t.Fatalf("文档符号链接状态码 = %d，预期 404", recorder.Code)
 	}
 	if recorder := request(server, http.MethodGet, "/file?path=assets/link.png"); recorder.Code != http.StatusNotFound {
@@ -478,7 +517,7 @@ func TestPathValidationAndSymlinkEscape(t *testing.T) {
 	if recorder := request(server, http.MethodGet, "/file?path=folder.pdf"); recorder.Code != http.StatusNotFound {
 		t.Fatalf("非普通文件状态码 = %d，预期 404", recorder.Code)
 	}
-	if recorder := request(server, http.MethodGet, "/api/doc?path=guides/ok.md"); recorder.Code != http.StatusOK {
+	if recorder := request(server, http.MethodGet, "/api/doc?id="+url.QueryEscape(documentIDFor(t, server, "guides/ok.md"))); recorder.Code != http.StatusOK {
 		t.Fatalf("有效文档状态码 = %d", recorder.Code)
 	}
 }
@@ -537,20 +576,26 @@ func TestFileResponses(t *testing.T) {
 	writeTestFile(t, root, "media/sound.mp3", []byte("mp3"))
 
 	server := newTestServer(t, root, nil)
+	ids := treeDocumentIDs(t, server)
 	cases := []struct {
 		path     string
 		wantType string
 		wantURL  string
 	}{
-		{"files/a.pdf", "pdf", "/file?path=files%2Fa.pdf"},
-		{"files/a.docx", "docx", "/file?path=files%2Fa.docx"},
-		{"files/a.txt", "text", "/file?path=files%2Fa.txt"},
-		{"images/pic.png", "image", "/file?path=images%2Fpic.png"},
-		{"media/clip.mp4", "video", "/file?path=media%2Fclip.mp4"},
-		{"media/sound.mp3", "audio", "/file?path=media%2Fsound.mp3"},
+		{"files/a.pdf", "pdf", "/file?id="},
+		{"files/a.docx", "docx", "/file?id="},
+		{"files/a.txt", "text", "/file?id="},
+		{"files/a.html", "html", "/view/html?id="},
+		{"images/pic.png", "image", "/file?id="},
+		{"media/clip.mp4", "video", "/file?id="},
+		{"media/sound.mp3", "audio", "/file?id="},
 	}
 	for _, tc := range cases {
-		recorder := request(server, http.MethodGet, "/api/doc?path="+tc.path)
+		id := ids[tc.path]
+		if id == "" {
+			t.Fatalf("%s 缺少文档 ID", tc.path)
+		}
+		recorder := request(server, http.MethodGet, "/api/doc?id="+url.QueryEscape(id))
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("%s 状态码 = %d，响应 = %s", tc.path, recorder.Code, recorder.Body.String())
 		}
@@ -558,8 +603,9 @@ func TestFileResponses(t *testing.T) {
 			Success bool             `json:"success"`
 			Data    documentResponse `json:"data"`
 		}](t, recorder)
-		if response.Data.Type != tc.wantType || response.Data.URL != tc.wantURL {
-			t.Errorf("%s = 类型 %q URL %q，预期 %q %q", tc.path, response.Data.Type, response.Data.URL, tc.wantType, tc.wantURL)
+		wantURL := tc.wantURL + url.QueryEscape(id)
+		if response.Data.Type != tc.wantType || response.Data.URL != wantURL || response.Data.ID != id {
+			t.Errorf("%s = 类型 %q URL %q ID %q，预期 %q %q %q", tc.path, response.Data.Type, response.Data.URL, response.Data.ID, tc.wantType, wantURL, id)
 		}
 		if response.Data.Size == 0 || response.Data.ModifiedAt == "" || response.Data.Toc == nil {
 			t.Errorf("%s 缺少 toc/size/modifiedAt: %+v", tc.path, response.Data)
@@ -630,4 +676,70 @@ func findTreeFolder(entries []TreeEntry, path string) (TreeEntry, bool) {
 		}
 	}
 	return TreeEntry{}, false
+}
+
+func TestDocumentQueryUsesIDs(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "guides/intro.md", []byte("# 指南\n\n接口关键字"))
+	writeTestFile(t, root, "guides/demo.html", []byte("<html><body>演示</body></html>"))
+	writeTestFile(t, root, "notes/plain.txt", []byte("文本"))
+	writeTestFile(t, root, "images/pic.png", []byte("png"))
+
+	server := newTestServer(t, root, nil)
+	ids := treeDocumentIDs(t, server)
+	for _, name := range []string{"guides/intro.md", "guides/demo.html", "notes/plain.txt", "images/pic.png"} {
+		if ids[name] == "" {
+			t.Fatalf("%s 缺少文档 ID", name)
+		}
+	}
+	if len(ids) != 4 {
+		t.Fatalf("文档数量 = %d，预期 4: %v", len(ids), ids)
+	}
+
+	recorder := request(server, http.MethodGet, "/api/doc?id="+url.QueryEscape(ids["guides/intro.md"]))
+	response := decodeJSON[struct {
+		Data documentResponse `json:"data"`
+	}](t, recorder)
+	if recorder.Code != http.StatusOK || response.Data.ID != ids["guides/intro.md"] || response.Data.Path != "guides/intro.md" {
+		t.Fatalf("ID 读取 = %d %+v", recorder.Code, response.Data)
+	}
+
+	search := request(server, http.MethodGet, "/api/search?q="+url.QueryEscape("接口关键字")+"&scope=full")
+	results := decodeJSON[struct {
+		Data []SearchResult `json:"data"`
+	}](t, search)
+	if len(results.Data) != 1 || results.Data[0].ID != ids["guides/intro.md"] {
+		t.Fatalf("搜索结果 = %+v", results.Data)
+	}
+
+	if recorder := request(server, http.MethodGet, "/file?id="+url.QueryEscape(ids["images/pic.png"])); recorder.Code != http.StatusOK || recorder.Body.String() != "png" {
+		t.Fatalf("按 ID 读取文件 = %d %q", recorder.Code, recorder.Body.String())
+	}
+	if recorder := request(server, http.MethodGet, "/view/html?id="+url.QueryEscape(ids["guides/demo.html"])); recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "演示") {
+		t.Fatalf("按 ID 查看 HTML = %d %q", recorder.Code, recorder.Body.String())
+	}
+
+	if status := request(server, http.MethodGet, "/api/doc").Code; status != http.StatusBadRequest {
+		t.Fatalf("缺少 ID 状态码 = %d，预期 400", status)
+	}
+	unknownID := strings.Repeat("0", 32)
+	if status := request(server, http.MethodGet, "/api/doc?id="+unknownID).Code; status != http.StatusNotFound {
+		t.Fatalf("未知 ID 状态码 = %d，预期 404", status)
+	}
+	if status := request(server, http.MethodGet, "/api/doc?path=guides/intro.md").Code; status != http.StatusBadRequest {
+		t.Fatalf("仅带路径状态码 = %d，预期 400", status)
+	}
+	if status := request(server, http.MethodGet, "/file?id="+unknownID).Code; status != http.StatusNotFound {
+		t.Fatalf("未知文件 ID 状态码 = %d，预期 404", status)
+	}
+	for _, invalid := range []string{"not-a-valid-id", "../outside.md", "guides/.hidden.md", "guides/intro.md"} {
+		if status := request(server, http.MethodGet, "/api/doc?id="+url.QueryEscape(invalid)).Code; status != http.StatusNotFound {
+			t.Errorf("/api/doc?id=%s 状态码 = %d，预期 404", invalid, status)
+		}
+	}
+
+	current := server.current()
+	if current == nil || current.docs["guides/intro.md"].ID != ids["guides/intro.md"] || current.byID[ids["guides/intro.md"]].Path != "guides/intro.md" {
+		t.Fatalf("索引中的 ID 与目录不一致: %+v", current)
+	}
 }

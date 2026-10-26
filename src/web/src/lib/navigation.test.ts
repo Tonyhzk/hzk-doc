@@ -4,40 +4,50 @@ import {
   decodeFragment,
   directoryOf,
   joinPath,
-  parseDocParam,
+  parseIdParam,
   readingHref,
+  readingLocation,
   resolveMarkdownHref,
   resolveViewerHref,
 } from '@/lib/navigation'
 
-describe('parseDocParam', () => {
-  it('读取普通路径并去掉前导斜杠', () => {
-    expect(parseDocParam('/指南/开始.md')).toBe('指南/开始.md')
+describe('parseIdParam', () => {
+  it('读取字符串 ID 并去掉首尾空白', () => {
+    expect(parseIdParam('  4f1c9a  ')).toBe('4f1c9a')
   })
 
   it('处理数组形式并忽略空值', () => {
-    expect(parseDocParam(['指南/开始.md', '其他.md'])).toBe('指南/开始.md')
-    expect(parseDocParam(null)).toBe('')
-    expect(parseDocParam(undefined)).toBe('')
-    expect(parseDocParam(42)).toBe('')
-  })
-
-  it('去掉首尾空白', () => {
-    expect(parseDocParam('  指南/开始.md  ')).toBe('指南/开始.md')
+    expect(parseIdParam(['4f1c9a', '0b2d'])).toBe('4f1c9a')
+    expect(parseIdParam(null)).toBe('')
+    expect(parseIdParam(undefined)).toBe('')
+    expect(parseIdParam(42)).toBe('')
   })
 })
 
 describe('readingHref', () => {
-  it('使用 URLSearchParams 编码文档路径', () => {
-    expect(readingHref('指南/开始.md')).toBe(
-      '/?doc=%E6%8C%87%E5%8D%97%2F%E5%BC%80%E5%A7%8B.md',
-    )
+  it('使用 ID 生成阅读地址', () => {
+    expect(readingHref('4f1c9a')).toBe('/?id=4f1c9a')
   })
 
   it('编码标题片段', () => {
-    expect(readingHref('开始.md', '第一 节')).toBe(
-      '/?doc=%E5%BC%80%E5%A7%8B.md#%E7%AC%AC%E4%B8%80%20%E8%8A%82',
+    expect(readingHref('4f1c9a', '第一 节')).toBe(
+      '/?id=4f1c9a#%E7%AC%AC%E4%B8%80%20%E8%8A%82',
     )
+  })
+})
+
+describe('readingLocation', () => {
+  it('返回带 ID 查询与标题片段的路由位置', () => {
+    expect(readingLocation('4f1c9a')).toEqual({
+      path: '/',
+      query: { id: '4f1c9a' },
+      hash: '',
+    })
+    expect(readingLocation('4f1c9a', '小节')).toEqual({
+      path: '/',
+      query: { id: '4f1c9a' },
+      hash: '#小节',
+    })
   })
 })
 
@@ -83,24 +93,22 @@ describe('resolveMarkdownHref', () => {
 describe('resolveViewerHref', () => {
   const base = 'http://localhost:8080/'
 
-  it('解析同站阅读链接与标题片段', () => {
+  it('解析同站 ID 阅读链接与标题片段', () => {
     expect(
-      resolveViewerHref(
-        '/?doc=guides%2Fother.md#%E6%A0%87%E9%A2%98',
-        base,
-      ),
+      resolveViewerHref('/?id=4f1c9a#%E6%A0%87%E9%A2%98', base),
     ).toEqual({
-      path: 'guides/other.md',
+      id: '4f1c9a',
       hash: '标题',
     })
   })
 
-  it('忽略其他站点、其他路径和缺少 doc 的地址', () => {
+  it('忽略其他站点、其他路径和缺少 ID 的地址', () => {
     expect(
-      resolveViewerHref('https://example.com/?doc=a.md', base),
+      resolveViewerHref('https://example.com/?id=4f1c9a', base),
     ).toBeNull()
-    expect(resolveViewerHref('/view/html?path=a.html', base)).toBeNull()
+    expect(resolveViewerHref('/view/html?id=4f1c9a', base)).toBeNull()
     expect(resolveViewerHref('/?q=a', base)).toBeNull()
+    expect(resolveViewerHref('/?doc=guides%2Fother.md', base)).toBeNull()
     expect(resolveViewerHref('#a', base)).toBeNull()
   })
 })

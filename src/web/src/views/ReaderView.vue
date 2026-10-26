@@ -3,9 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
+  documentFileUrl,
   fetchDocument,
   fetchTree,
-  fileUrl,
 } from '@/api/docs'
 import { ApiError } from '@/api/http'
 import type {
@@ -31,10 +31,16 @@ import {
   formatDate,
   kindLabel,
 } from '@/lib/format'
-import { decodeFragment, parseDocParam } from '@/lib/navigation'
+import {
+  decodeFragment,
+  parseIdParam,
+  readingLocation,
+  type DocumentTarget,
+} from '@/lib/navigation'
 import {
   countFolderDocuments,
   documentNeighbors,
+  findFileByPath,
   flattenFiles,
   folderTrail,
 } from '@/lib/tree'
@@ -63,9 +69,10 @@ const searchOpen = ref(false)
 const drawerOpen = ref(false)
 let docController: AbortController | null = null
 
-const currentPath = computed(() => parseDocParam(route.query.doc))
+const currentId = computed(() => parseIdParam(route.query.id))
+const currentPath = computed(() => document.value?.path ?? '')
 const neighbors = computed(() =>
-  documentNeighbors(tree.value, currentPath.value),
+  documentNeighbors(tree.value, currentId.value),
 )
 const currentFolders = computed(() => folderTrail(currentPath.value))
 const effectiveToc = computed<TocItem[]>(() => {
@@ -89,7 +96,7 @@ const wideDocument = computed(() =>
 )
 const noTocLayout = computed(
   () =>
-    Boolean(currentPath.value) &&
+    Boolean(currentId.value) &&
     docState.value !== 'loading' &&
     document.value?.type !== 'markdown',
 )
@@ -141,10 +148,10 @@ const canDownload = computed(() => {
 })
 
 watch(
-  currentPath,
-  (path) => {
+  currentId,
+  (id) => {
     drawerOpen.value = false
-    void loadDocument(path)
+    void loadDocument(id)
   },
   { immediate: true },
 )
@@ -165,14 +172,14 @@ watch(
   (name) => {
     if (document.value) {
       window.document.title = `${document.value.title} · ${name}`
-    } else if (!currentPath.value) {
+    } else if (!currentId.value) {
       window.document.title = name
     }
   },
 )
 
-function readingLink(path: string) {
-  return { path: '/', query: { doc: path } }
+function readingLink(id: string) {
+  return readingLocation(id)
 }
 
 async function loadTree(): Promise<void> {
@@ -188,13 +195,13 @@ async function loadTree(): Promise<void> {
   }
 }
 
-async function loadDocument(path: string): Promise<void> {
+async function loadDocument(id: string): Promise<void> {
   docController?.abort()
   docController = null
   toc.value = []
   document.value = null
 
-  if (!path) {
+  if (!id) {
     docState.value = 'idle'
     docError.value = ''
     window.document.title = site.name
@@ -207,7 +214,7 @@ async function loadDocument(path: string): Promise<void> {
   docController = controller
 
   try {
-    const data = await fetchDocument(path, controller.signal)
+    const data = await fetchDocument(id, controller.signal)
     if (controller.signal.aborted) {
       return
     }
@@ -245,10 +252,10 @@ function scrollToHash(): void {
   })
 }
 
-function openPath(path: string, heading = ''): void {
+function openDocument(id: string, heading = ''): void {
   searchOpen.value = false
   drawerOpen.value = false
-  if (path === currentPath.value) {
+  if (id === currentId.value) {
     if (heading) {
       scrollToHeading(heading)
       const url = new URL(window.location.href)
@@ -262,15 +269,23 @@ function openPath(path: string, heading = ''): void {
     }
     return
   }
-  void router.push({
-    path: '/',
-    query: { doc: path },
-    hash: heading ? `#${heading}` : '',
-  })
+  void router.push(readingLocation(id, heading))
 }
 
 function retryDocument(): void {
-  void loadDocument(currentPath.value)
+  void loadDocument(currentId.value)
+}
+
+function navigateToTarget(target: DocumentTarget): void {
+  let id = target.id ?? ''
+  if (!id && target.path) {
+    id = findFileByPath(tree.value, target.path)?.id ?? ''
+  }
+  if (!id) {
+    notify('没有找到链接指向的文档。')
+    return
+  }
+  openDocument(id, target.heading)
 }
 
 async function copyFullText(): Promise<void> {
@@ -296,7 +311,7 @@ function fileBasename(path: string): string {
 }
 
 function downloadHrefFor(current: DocumentData): string {
-  return fileUrl(current.path, true)
+  return documentFileUrl(current.id, true)
 }
 
 function downloadDocument(): void {
@@ -354,7 +369,7 @@ onBeforeUnmount(() => {
     <div
       class="reader-layout"
       :class="{
-        'is-home': !currentPath,
+        'is-home': !currentId,
         'no-toc': noTocLayout,
       }"
     >
@@ -372,13 +387,13 @@ onBeforeUnmount(() => {
         <TreeNav
           v-else
           :entries="tree"
-          :current-path="currentPath"
-          @select="openPath"
+          :current-id="currentId"
+          @select="openDocument"
         />
       </aside>
 
       <main id="main-content" class="reader-main" tabindex="-1">
-        <section v-if="!currentPath" class="overview">
+        <section v-if="!currentId" class="overview">
           <header class="overview-header">
             <h1>{{ site.name }}</h1>
             <p class="overview-lead">
@@ -423,8 +438,8 @@ onBeforeUnmount(() => {
                   <span>{{ card.count }} 篇</span>
                 </div>
                 <ul class="folder-docs">
-                  <li v-for="file in card.files" :key="file.path">
-                    <RouterLink :to="readingLink(file.path)">
+                  <li v-for="file in card.files" :key="file.id">
+                    <RouterLink :to="readingLink(file.id)">
                       {{ file.displayName || file.name }}
                     </RouterLink>
                     <span class="doc-kind">
@@ -440,7 +455,7 @@ onBeforeUnmount(() => {
               <RouterLink
                 v-else
                 class="overview-card overview-file"
-                :to="readingLink(card.file.path)"
+                :to="readingLink(card.file.id)"
               >
                 <span class="file-mark" aria-hidden="true">
                   {{ fileMark(card.file.fileTypeCategory, card.file.path) }}
@@ -559,10 +574,11 @@ onBeforeUnmount(() => {
 
           <div class="article-body">
             <DocumentContent
-              :key="document.path"
+              :key="document.id"
               :document="document"
               @toc="toc = $event"
               @notice="notify"
+              @navigate="navigateToTarget"
             />
           </div>
 
@@ -574,7 +590,7 @@ onBeforeUnmount(() => {
             <RouterLink
               v-if="neighbors.previous"
               class="pager-link"
-              :to="readingLink(neighbors.previous.path)"
+              :to="readingLink(neighbors.previous.id)"
             >
               <span class="pager-label">上一篇</span>
               <span class="pager-title">
@@ -585,7 +601,7 @@ onBeforeUnmount(() => {
             <RouterLink
               v-if="neighbors.next"
               class="pager-link pager-next"
-              :to="readingLink(neighbors.next.path)"
+              :to="readingLink(neighbors.next.id)"
             >
               <span class="pager-label">下一篇</span>
               <span class="pager-title">
@@ -609,13 +625,13 @@ onBeforeUnmount(() => {
     <TreeDrawer
       v-model:open="drawerOpen"
       :entries="tree"
-      :current-path="currentPath"
-      @select="openPath"
+      :current-id="currentId"
+      @select="openDocument"
     />
     <SearchDialog
       :open="searchOpen"
       @close="searchOpen = false"
-      @select="openPath"
+      @select="openDocument"
     />
     <ToastNotice :message="message" />
   </div>

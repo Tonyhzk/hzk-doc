@@ -22,6 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"hzk-doc/internal/catalog"
 	"hzk-doc/internal/content"
 )
 
@@ -55,6 +56,7 @@ var (
 
 // Config 控制管理接口。
 type Config struct {
+	Catalog *catalog.Store
 	// DocsDir 是文档根目录，必填。
 	DocsDir string
 	// Password 非空时启用单管理员账号，至少 12 个字符。
@@ -67,6 +69,8 @@ type Config struct {
 
 // Handler 在 /api/admin/ 下提供管理接口。
 type Handler struct {
+	catalog      *catalog.Store
+	ownsCatalog  bool
 	root         *os.Root
 	enabled      bool
 	passwordHash [sha256.Size]byte
@@ -122,6 +126,15 @@ func New(cfg Config) (*Handler, error) {
 		sessions: make(map[string]session),
 		limits:   make(map[string]*loginLimit),
 	}
+	h.catalog = cfg.Catalog
+	if h.catalog == nil {
+		h.catalog, err = catalog.Open(rootPath)
+		if err != nil {
+			root.Close()
+			return nil, err
+		}
+		h.ownsCatalog = true
+	}
 	if h.enabled {
 		h.passwordHash = sha256.Sum256([]byte(cfg.Password))
 	}
@@ -135,7 +148,11 @@ func (h *Handler) Close() error {
 	}
 	h.files.Lock()
 	defer h.files.Unlock()
-	return h.root.Close()
+	err := h.root.Close()
+	if h.ownsCatalog {
+		err = errors.Join(err, h.catalog.Close())
+	}
+	return err
 }
 
 // ServeHTTP 接收完整的 /api/admin/ 路径。
@@ -198,6 +215,11 @@ func (h *Handler) dispatch(w http.ResponseWriter, r *http.Request) (any, *apiErr
 		default:
 			return nil, methodNotAllowed(http.MethodPost + ", " + http.MethodPut)
 		}
+	case "/api/admin/rename":
+		if e := requireMethod(r, http.MethodPost); e != nil {
+			return nil, e
+		}
+		return h.handleRename(w, r)
 	case "/api/admin/folder":
 		if e := requireMethod(r, http.MethodPost); e != nil {
 			return nil, e
@@ -273,7 +295,21 @@ func requireMethod(r *http.Request, method string) *apiError {
 
 func (h *Handler) mutate(fn func() *apiError) *apiError {
 	h.files.Lock()
-	apiErr := fn()
+	h.catalog.Lock()
+	var apiErr *apiError
+	if err := h.catalog.Recover(); err != nil {
+		apiErr = apiErrorFor(err)
+	} else if err := h.catalog.Sync(); err != nil {
+		apiErr = apiErrorFor(err)
+	} else {
+		apiErr = fn()
+		if apiErr == nil {
+			if err := h.catalog.Sync(); err != nil {
+				apiErr = apiErrorFor(err)
+			}
+		}
+	}
+	h.catalog.Unlock()
 	h.files.Unlock()
 	if apiErr != nil {
 		return apiErr
@@ -551,7 +587,7 @@ func apiErrorFor(err error) *apiError {
 		return newAPIError(http.StatusRequestEntityTooLarge, "内容过大")
 	case errors.Is(err, fs.ErrNotExist):
 		return newAPIError(http.StatusNotFound, "文件或目录不存在")
-	case errors.Is(err, fs.ErrExist):
+	case errors.Is(err, fs.ErrExist), errors.Is(err, catalog.ErrConflict):
 		return newAPIError(http.StatusConflict, "目标已存在")
 	case errors.Is(err, fs.ErrPermission):
 		return newAPIError(http.StatusForbidden, "没有权限")

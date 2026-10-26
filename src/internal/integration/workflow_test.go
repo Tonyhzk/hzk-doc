@@ -14,6 +14,7 @@ import (
 	"testing/fstest"
 
 	"hzk-doc/internal/admin"
+	"hzk-doc/internal/catalog"
 	"hzk-doc/internal/server"
 )
 
@@ -22,15 +23,20 @@ func TestManagementUpdatesReader(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(docs, "README.md"), []byte("# 首页"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	store, err := catalog.Open(docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
 	reader, err := server.New(server.Config{
-		DocsDir: docs, SiteName: "测试站", Version: "test", AdminEnabled: true,
+		Catalog: store, DocsDir: docs, SiteName: "测试站", Version: "test", AdminEnabled: true,
 	}, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<!doctype html><html lang=\"zh-CN\"></html>")}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reader.Close()
 	manager, err := admin.New(admin.Config{
-		DocsDir: docs, Password: "integration-test-password",
+		Catalog: store, DocsDir: docs, Password: "integration-test-password",
 		OnChange: reader.Refresh, Preview: reader.PreviewMarkdown,
 	})
 	if err != nil {

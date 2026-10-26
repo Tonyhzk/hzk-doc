@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"hzk-doc/internal/admin"
+	"hzk-doc/internal/catalog"
 	"hzk-doc/internal/server"
 	"hzk-doc/internal/webui"
 )
@@ -43,12 +44,25 @@ func run(args []string) error {
 	if password != "" && len([]rune(password)) < 12 {
 		return errors.New("HZK_DOC_ADMIN_PASSWORD 至少需要 12 个字符")
 	}
+	store, err := catalog.Open(cfg.docs)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	if cfg.migrateIDs {
+		count, err := store.MigrateFilenames()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("已登记文档 ID，更新 %d 个文件名。\n", count)
+		return nil
+	}
 	assets, err := webui.Files()
 	if err != nil {
 		return err
 	}
 	reader, err := server.New(server.Config{
-		DocsDir: cfg.docs, SiteName: cfg.name, Version: version,
+		Catalog: store, DocsDir: cfg.docs, SiteName: cfg.name, Version: version,
 		AdminEnabled: password != "", RefreshInterval: cfg.refresh,
 	}, assets)
 	if err != nil {
@@ -56,7 +70,7 @@ func run(args []string) error {
 	}
 	defer reader.Close()
 	manager, err := admin.New(admin.Config{
-		DocsDir: cfg.docs, Password: password,
+		Catalog: store, DocsDir: cfg.docs, Password: password,
 		OnChange: reader.Refresh, Preview: reader.PreviewMarkdown,
 	})
 	if err != nil {

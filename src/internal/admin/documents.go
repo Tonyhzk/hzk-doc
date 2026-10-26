@@ -9,10 +9,12 @@ import (
 	"path"
 	"strings"
 
+	"hzk-doc/internal/catalog"
 	"hzk-doc/internal/content"
 )
 
 type sourceData struct {
+	ID       string `json:"id,omitempty"`
 	Path     string `json:"path"`
 	Content  string `json:"content"`
 	Revision string `json:"revision"`
@@ -25,6 +27,7 @@ type documentRequest struct {
 }
 
 type documentData struct {
+	ID       string `json:"id,omitempty"`
 	Path     string `json:"path"`
 	Revision string `json:"revision"`
 }
@@ -38,6 +41,7 @@ type folderData struct {
 }
 
 type uploadData struct {
+	ID   string `json:"id,omitempty"`
 	Path string `json:"path"`
 	Size int64  `json:"size"`
 }
@@ -59,7 +63,7 @@ func (h *Handler) handleSource(r *http.Request) (any, *apiError) {
 	if err != nil {
 		return nil, apiErrorFor(err)
 	}
-	return sourceData{Path: name, Content: string(data), Revision: contentRevision(data)}, nil
+	return sourceData{ID: h.documentID(name), Path: name, Content: string(data), Revision: contentRevision(data)}, nil
 }
 
 func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) (any, *apiError) {
@@ -75,11 +79,18 @@ func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) (
 		return nil, newAPIError(http.StatusBadRequest, "路径无效")
 	}
 
+	if !catalog.IsDocument(request.Path) {
+		return nil, newAPIError(http.StatusBadRequest, "素材目录不能新建文档")
+	}
+	request.Path = path.Join(path.Dir(request.Path), catalog.CleanName(path.Base(request.Path)))
+	if err := validEditablePath(request.Path, false); err != nil {
+		return nil, newAPIError(http.StatusBadRequest, "路径无效")
+	}
 	apiErr := h.mutate(func() *apiError {
 		if err := h.ensureParentDir(request.Path); err != nil {
 			return apiErrorFor(err)
 		}
-		if err := h.writeNewFile(request.Path, []byte(request.Content)); err != nil {
+		if err := h.createFile(request.Path, []byte(request.Content)); err != nil {
 			return apiErrorFor(err)
 		}
 		return nil
@@ -87,7 +98,7 @@ func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) (
 	if apiErr != nil {
 		return nil, apiErr
 	}
-	return createdResult{data: documentData{Path: request.Path, Revision: contentRevision([]byte(request.Content))}}, nil
+	return createdResult{data: documentData{ID: h.documentID(request.Path), Path: request.Path, Revision: contentRevision([]byte(request.Content))}}, nil
 }
 
 func (h *Handler) handleEditDocument(w http.ResponseWriter, r *http.Request) (any, *apiError) {
@@ -118,12 +129,15 @@ func (h *Handler) handleEditDocument(w http.ResponseWriter, r *http.Request) (an
 		if err := h.writeFileAtomic(request.Path, []byte(request.Content), perm); err != nil {
 			return apiErrorFor(err)
 		}
+		if err := h.catalog.Touch(request.Path); err != nil {
+			return apiErrorFor(errors.Join(err, h.writeFileAtomic(request.Path, current, perm)))
+		}
 		return nil
 	})
 	if apiErr != nil {
 		return nil, apiErr
 	}
-	return documentData{Path: request.Path, Revision: contentRevision([]byte(request.Content))}, nil
+	return documentData{ID: h.documentID(request.Path), Path: request.Path, Revision: contentRevision([]byte(request.Content))}, nil
 }
 
 func (h *Handler) handleCreateFolder(w http.ResponseWriter, r *http.Request) (any, *apiError) {
@@ -212,7 +226,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) (any, *ap
 			if int64(len(payload)) > maxUploadBytes {
 				return nil, newAPIError(http.StatusRequestEntityTooLarge, "文件超过大小限制")
 			}
-			filename = rawName
+			filename = catalog.CleanName(rawName)
 			data = payload
 		case "directory":
 			if hasDirectory {
@@ -264,7 +278,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) (any, *ap
 		}
 		dirHandle.Close()
 
-		if err := h.writeNewFile(target, data); err != nil {
+		if err := h.createFile(target, data); err != nil {
 			return apiErrorFor(err)
 		}
 		return nil
@@ -272,7 +286,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) (any, *ap
 	if apiErr != nil {
 		return nil, apiErr
 	}
-	return createdResult{data: uploadData{Path: target, Size: int64(len(data))}}, nil
+	return createdResult{data: uploadData{ID: h.documentID(target), Path: target, Size: int64(len(data))}}, nil
 }
 
 func validateUploadName(name string) error {

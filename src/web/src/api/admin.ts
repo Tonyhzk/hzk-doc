@@ -3,6 +3,7 @@ import type {
   AdminDocumentResult,
   AdminEntries,
   AdminOrderResult,
+  AdminRenameResult,
   AdminSession,
   AdminSource,
   AdminUploadResult,
@@ -134,6 +135,20 @@ export async function createFolder(path: string): Promise<{ path: string }> {
     {
       method: 'POST',
       ...jsonBody({ path }),
+    },
+    true,
+  )
+}
+
+export async function renameDocument(
+  path: string,
+  name: string,
+): Promise<AdminRenameResult> {
+  return adminRequest<AdminRenameResult>(
+    '/api/admin/rename',
+    {
+      method: 'POST',
+      ...jsonBody({ path, name }),
     },
     true,
   )

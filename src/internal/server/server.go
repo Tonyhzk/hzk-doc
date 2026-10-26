@@ -18,9 +18,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"hzk-doc/internal/catalog"
 )
 
 type Config struct {
+	Catalog         *catalog.Store
 	DocsDir         string
 	SiteName        string
 	Version         string
@@ -36,12 +39,14 @@ type newOptions struct {
 var _ http.Handler = (*Server)(nil)
 
 type Server struct {
-	config     Config
-	root       *os.Root
-	assets     fs.FS
-	handler    http.Handler
-	logger     *slog.Logger
-	pdfExtract func(path string) (string, error)
+	catalog     *catalog.Store
+	ownsCatalog bool
+	config      Config
+	root        *os.Root
+	assets      fs.FS
+	handler     http.Handler
+	logger      *slog.Logger
+	pdfExtract  func(path string) (string, error)
 
 	state       atomic.Pointer[state]
 	rebuildMu   sync.Mutex
@@ -56,6 +61,7 @@ type state struct {
 	tree        []TreeEntry
 	docs        map[string]DocMeta
 	index       *searchIndex
+	byID        map[string]DocMeta
 	fingerprint string
 }
 
@@ -100,8 +106,20 @@ func newServer(cfg Config, assets fs.FS, options newOptions) (*Server, error) {
 		stop:       make(chan struct{}),
 		closeDone:  make(chan struct{}),
 	}
+	s.catalog = cfg.Catalog
+	if s.catalog == nil {
+		s.catalog, err = catalog.Open(rootPath)
+		if err != nil {
+			root.Close()
+			return nil, err
+		}
+		s.ownsCatalog = true
+	}
 	if err := s.rebuild(true); err != nil {
 		_ = root.Close()
+		if s.ownsCatalog {
+			s.catalog.Close()
+		}
 		return nil, err
 	}
 	s.handler = s.buildHandler()
@@ -194,6 +212,8 @@ func (s *Server) rebuild(force bool) error {
 		return errors.New("服务已关闭")
 	}
 
+	s.catalog.Lock()
+	defer s.catalog.Unlock()
 	tree, docs, err := s.scanTree()
 	if err != nil {
 		return err
@@ -206,7 +226,12 @@ func (s *Server) rebuild(force bool) error {
 	}
 
 	index := buildSearchIndex(s, docs)
+	byID := make(map[string]DocMeta, len(docs))
+	for _, meta := range docs {
+		byID[meta.ID] = meta
+	}
 	s.state.Store(&state{
+		byID:        byID,
 		tree:        tree,
 		docs:        docs,
 		index:       index,
@@ -248,7 +273,7 @@ func (s *Server) PreviewMarkdown(documentPath, source string) (string, error) {
 			documentDir = ""
 		}
 		rendered, _, err := renderMarkdown([]byte(source), documentDir)
-		return rendered, err
+		return s.documentLinks(rendered, false), err
 	default:
 		return source, nil
 	}
@@ -320,6 +345,9 @@ func (s *Server) Close() error {
 
 	s.rebuildMu.Lock()
 	err := s.root.Close()
+	if s.ownsCatalog {
+		err = errors.Join(err, s.catalog.Close())
+	}
 	s.rebuildMu.Unlock()
 	s.closeErr = err
 	close(s.closeDone)

@@ -14,6 +14,7 @@ type options struct {
 	name        string
 	refresh     time.Duration
 	showVersion bool
+	migrateIDs  bool
 }
 
 func parseOptions(args []string, output io.Writer) (options, error) {
@@ -25,6 +26,7 @@ func parseOptions(args []string, output io.Writer) (options, error) {
 	flags.StringVar(&cfg.name, "name", "hzk-doc", "站点名称")
 	flags.DurationVar(&cfg.refresh, "refresh", 3*time.Second, "外部文件变更检查间隔")
 	flags.BoolVar(&cfg.showVersion, "version", false, "显示版本后退出")
+	flags.BoolVar(&cfg.migrateIDs, "migrate-ids", false, "登记文档 ID 并去除文件名中的旧 ID，完成后退出")
 	if err := flags.Parse(args); err != nil {
 		return cfg, err
 	}

@@ -531,7 +531,7 @@ func resolveDocReference(raw, docDir string) (string, string, bool) {
 func viewerURL(relative string) (string, bool) {
 	extension := strings.ToLower(strings.TrimPrefix(path.Ext(relative), "."))
 	if extension == "md" || extension == "markdown" || extension == "mark" {
-		return "/?doc=" + url.QueryEscape(relative), true
+		return fileURL(relative), true
 	}
 	if isHTML(extension) {
 		return "/view/html?path=" + url.QueryEscape(relative), true

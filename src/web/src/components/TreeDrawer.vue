@@ -7,12 +7,12 @@ import TreeNav from '@/components/TreeNav.vue'
 const props = defineProps<{
   open: boolean
   entries: TreeEntry[]
-  currentPath: string
+  currentId: string
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  select: [path: string]
+  select: [id: string]
 }>()
 
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -42,8 +42,8 @@ function close(): void {
   emit('update:open', false)
 }
 
-function onSelect(path: string): void {
-  emit('select', path)
+function onSelect(id: string): void {
+  emit('select', id)
   close()
 }
 
@@ -76,7 +76,7 @@ function onBackdrop(event: MouseEvent): void {
     <div class="drawer-body">
       <TreeNav
         :entries="entries"
-        :current-path="currentPath"
+        :current-id="currentId"
         @select="onSelect"
       />
     </div>

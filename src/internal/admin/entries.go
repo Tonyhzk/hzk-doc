@@ -12,6 +12,7 @@ import (
 )
 
 type entryData struct {
+	ID         string    `json:"id,omitempty"`
 	Name       string    `json:"name"`
 	Path       string    `json:"path"`
 	Type       string    `json:"type"`
@@ -91,6 +92,7 @@ func (h *Handler) listEntries(dir string) ([]entryData, error) {
 			entry.Kind = "folder"
 		} else {
 			entry.Type = "file"
+			entry.ID = h.documentID(entry.Path)
 			entry.Kind = content.Kind(name)
 			entry.Size = info.Size()
 			entry.Editable = content.Editable(name)

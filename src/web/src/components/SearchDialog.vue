@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  select: [path: string]
+  select: [id: string]
 }>()
 
 type SearchStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -192,7 +192,7 @@ function openHit(hit: SearchHit | undefined): void {
   if (!hit) {
     return
   }
-  emit('select', hit.path)
+  emit('select', hit.id)
   close()
 }
 
@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
           <button
             v-for="(hit, index) in results"
             :id="`search-option-${index}`"
-            :key="hit.path"
+            :key="hit.id"
             type="button"
             class="search-hit"
             role="option"

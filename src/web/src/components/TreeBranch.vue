@@ -9,12 +9,12 @@ const props = defineProps<{
   node: TreeEntry
   depth: number
   expanded: Set<string>
-  currentPath: string
+  currentId: string
 }>()
 
 const emit = defineEmits<{
   toggle: [path: string]
-  select: [path: string]
+  select: [id: string]
 }>()
 
 const rowPadding = computed(() => `${8 + props.depth * 14}px`)
@@ -32,7 +32,7 @@ function onClick(event: MouseEvent): void {
     return
   }
   event.preventDefault()
-  emit('select', props.node.path)
+  emit('select', props.node.id)
 }
 </script>
 
@@ -59,7 +59,7 @@ function onClick(event: MouseEvent): void {
         :node="child"
         :depth="depth + 1"
         :expanded="expanded"
-        :current-path="currentPath"
+        :current-id="currentId"
         @toggle="$emit('toggle', $event)"
         @select="$emit('select', $event)"
       />
@@ -68,10 +68,10 @@ function onClick(event: MouseEvent): void {
   <li v-else class="tree-item">
     <a
       class="tree-row tree-file"
-      :class="{ active: node.path === currentPath }"
-      :href="readingHref(node.path)"
+      :class="{ active: node.id === currentId }"
+      :href="readingHref(node.id)"
       :style="{ paddingLeft: rowPadding }"
-      :aria-current="node.path === currentPath ? 'page' : undefined"
+      :aria-current="node.id === currentId ? 'page' : undefined"
       @click="onClick"
     >
       <span class="file-mark" aria-hidden="true">

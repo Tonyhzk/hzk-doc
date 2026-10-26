@@ -5,8 +5,12 @@ export function fileUrl(path: string, download = false): string {
   return `/file?path=${encodeURIComponent(path)}${download ? '&download=1' : ''}`
 }
 
-export function htmlViewUrl(path: string): string {
-  return `/view/html?path=${encodeURIComponent(path)}`
+export function documentFileUrl(id: string, download = false): string {
+  return `/file?id=${encodeURIComponent(id)}${download ? '&download=1' : ''}`
+}
+
+export function htmlViewUrl(id: string): string {
+  return `/view/html?id=${encodeURIComponent(id)}`
 }
 
 export async function fetchTree(signal?: AbortSignal): Promise<TreeEntry[]> {
@@ -14,11 +18,11 @@ export async function fetchTree(signal?: AbortSignal): Promise<TreeEntry[]> {
 }
 
 export async function fetchDocument(
-  path: string,
+  id: string,
   signal?: AbortSignal,
 ): Promise<DocumentData> {
   const document = await apiRequest<DocumentData>(
-    `/api/doc?path=${encodeURIComponent(path)}`,
+    `/api/doc?id=${encodeURIComponent(id)}`,
     { signal },
   )
 
@@ -33,7 +37,7 @@ export async function fetchDocument(
 
   if (document.type === 'text' && document.rawContent === undefined) {
     try {
-      const response = await fetch(fileUrl(path), { signal })
+      const response = await fetch(documentFileUrl(id), { signal })
       if (response.ok) {
         document.rawContent = await response.text()
         document.content = document.rawContent

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 
-import { fileUrl, htmlViewUrl } from '@/api/docs'
+import { documentFileUrl, htmlViewUrl } from '@/api/docs'
 import type { DocumentData, TocItem } from '@/api/types'
 import ImageLightbox from '@/components/ImageLightbox.vue'
 import OfficePreview from '@/components/OfficePreview.vue'
@@ -12,6 +11,7 @@ import {
   decodeFragment,
   resolveMarkdownHref,
   resolveViewerHref,
+  type DocumentTarget,
 } from '@/lib/navigation'
 
 const props = defineProps<{
@@ -21,9 +21,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   toc: [items: TocItem[]]
   notice: [message: string]
+  navigate: [target: DocumentTarget]
 }>()
 
-const router = useRouter()
 const markdownRoot = ref<HTMLElement | null>(null)
 const lightboxOpen = ref(false)
 const lightboxSrc = ref('')
@@ -180,7 +180,7 @@ async function handleArticleClick(event: MouseEvent): Promise<void> {
   const viewerLink = resolveViewerHref(href, window.location.href)
   if (viewerLink) {
     event.preventDefault()
-    await navigateToDocument(viewerLink.path, viewerLink.hash)
+    emit('navigate', { id: viewerLink.id, heading: viewerLink.hash })
     return
   }
 
@@ -189,30 +189,7 @@ async function handleArticleClick(event: MouseEvent): Promise<void> {
     return
   }
   event.preventDefault()
-  await navigateToDocument(resolved.path, resolved.hash)
-}
-
-async function navigateToDocument(path: string, heading: string): Promise<void> {
-  if (path === props.document.path) {
-    if (heading) {
-      scrollToHeading(heading)
-      const url = new URL(window.location.href)
-      url.hash = encodeURIComponent(heading)
-      window.history.replaceState(null, '', url)
-    } else {
-      const url = new URL(window.location.href)
-      url.hash = ''
-      window.history.replaceState(null, '', url)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-    return
-  }
-
-  await router.push({
-    path: '/',
-    query: { doc: path },
-    hash: heading ? `#${heading}` : '',
-  })
+  emit('navigate', { path: resolved.path, heading: resolved.hash })
 }
 
 function closeLightbox(): void {
@@ -220,13 +197,13 @@ function closeLightbox(): void {
 }
 
 function openImage(): void {
-  lightboxSrc.value = props.document.url || fileUrl(props.document.path)
+  lightboxSrc.value = documentFileUrl(props.document.id)
   lightboxAlt.value = props.document.title
   lightboxOpen.value = true
 }
 
 function downloadUrl(): string {
-  return fileUrl(props.document.path, true)
+  return documentFileUrl(props.document.id, true)
 }
 </script>
 
@@ -254,7 +231,7 @@ function downloadUrl(): string {
       @click="openImage()"
     >
       <img
-        :src="document.url || fileUrl(document.path)"
+        :src="documentFileUrl(document.id)"
         :alt="document.title"
       />
     </button>
@@ -266,7 +243,7 @@ function downloadUrl(): string {
   <figure v-else-if="document.type === 'html'" class="html-document">
     <iframe
       class="html-frame"
-      :src="document.url || htmlViewUrl(document.path)"
+      :src="htmlViewUrl(document.id)"
       :title="`${document.title}（沙箱页面）`"
       sandbox=""
       referrerpolicy="no-referrer"
@@ -277,23 +254,23 @@ function downloadUrl(): string {
   <figure v-else-if="document.type === 'pdf'" class="pdf-document">
     <iframe
       class="pdf-frame"
-      :src="document.url || fileUrl(document.path)"
+      :src="documentFileUrl(document.id)"
       :title="document.title"
     ></iframe>
     <figcaption>
-      <a :href="fileUrl(document.path, true)" download>下载 PDF</a>
+      <a :href="documentFileUrl(document.id, true)" download>下载 PDF</a>
     </figcaption>
   </figure>
 
   <div v-else-if="document.type === 'audio'" class="media-document">
-    <audio controls :src="document.url || fileUrl(document.path)">
+    <audio controls :src="documentFileUrl(document.id)">
       当前浏览器不支持音频播放。
     </audio>
     <p><a :href="downloadUrl()" download>下载音频</a></p>
   </div>
 
   <div v-else-if="document.type === 'video'" class="media-document">
-    <video controls :src="document.url || fileUrl(document.path)">
+    <video controls :src="documentFileUrl(document.id)">
       当前浏览器不支持视频播放。
     </video>
     <p><a :href="downloadUrl()" download>下载视频</a></p>

@@ -12,10 +12,11 @@ func TestConcurrentReadRequests(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, root, "guide.md", []byte("# 指南\n\n并发搜索关键词。"))
 	server := newTestServer(t, root, nil)
+	guideID := documentIDFor(t, server, "guide.md")
 
 	targets := []string{
 		"/api/tree",
-		"/api/doc?path=guide.md",
+		"/api/doc?id=" + guideID,
 		"/api/search?q=关键词&scope=full",
 	}
 	var wait sync.WaitGroup

@@ -131,6 +131,7 @@ func (h *Handler) loadOrder() (map[string][]string, error) {
 	if order == nil {
 		order = make(map[string][]string)
 	}
+	h.catalog.ResolveOrder(order)
 	return order, nil
 }
 
