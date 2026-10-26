@@ -16,6 +16,7 @@ import { AdminAuthError } from '@/api/http'
 import AdminBrowser from '@/components/admin/AdminBrowser.vue'
 import AdminEditor from '@/components/admin/AdminEditor.vue'
 import AdminLogin from '@/components/admin/AdminLogin.vue'
+import AdminTrash from '@/components/admin/AdminTrash.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import ToastNotice from '@/components/ToastNotice.vue'
@@ -36,6 +37,7 @@ const logoutBusy = ref(false)
 const workspaceMounted = ref(false)
 const activePath = ref('')
 const editorDirty = ref(false)
+const trashOpen = ref(false)
 const browserRef = ref<InstanceType<typeof AdminBrowser> | null>(null)
 
 const confirmOpen = ref(false)
@@ -176,6 +178,17 @@ function closeEditor(): void {
   void browserRef.value?.refresh()
 }
 
+function openTrash(): void {
+  editorDirty.value = false
+  activePath.value = ''
+  trashOpen.value = true
+}
+
+function closeTrash(): void {
+  trashOpen.value = false
+  void browserRef.value?.refresh()
+}
+
 function viewDocument(path: string): void {
   void router.push({ path: '/', query: { doc: path } })
 }
@@ -292,10 +305,17 @@ function discardAndNavigate(): void {
         class="admin-workspace"
       >
         <AdminBrowser
-          v-show="!activePath"
+          v-show="!activePath && !trashOpen"
           ref="browserRef"
           @edit="openEditor"
           @view="viewDocument"
+          @notice="notify"
+          @auth-expired="handleAuthExpired"
+          @open-trash="openTrash"
+        />
+        <AdminTrash
+          v-if="trashOpen"
+          @back="closeTrash"
           @notice="notify"
           @auth-expired="handleAuthExpired"
         />

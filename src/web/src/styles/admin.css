@@ -203,6 +203,78 @@
   text-align: center;
 }
 
+.button-danger-text {
+  color: var(--danger);
+}
+
+.button-danger-text:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.trash-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.trash-select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.trash-row {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.trash-row:first-child {
+  border-top: 0;
+}
+
+.trash-row:hover {
+  background: var(--bg-elevated);
+}
+
+.trash-row-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  cursor: pointer;
+}
+
+.trash-items {
+  margin: 6px 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.trash-item {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.trash-item .entry-name {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .editor-head {
   display: flex;
   align-items: flex-start;

@@ -95,6 +95,28 @@ export interface AdminUploadResult {
   size: number
 }
 
+export interface TrashItem {
+  path: string
+  type: 'folder' | 'file'
+  size: number
+}
+
+export interface TrashEntry {
+  id: string
+  deletedAt: string
+  items: TrashItem[]
+  size: number
+}
+
+export interface TrashData {
+  entries: TrashEntry[]
+  size: number
+}
+
+export interface TrashActionResult {
+  count: number
+}
+
 export interface PreviewResult {
   content: string
 }

@@ -218,6 +218,31 @@ func (h *Handler) dispatch(w http.ResponseWriter, r *http.Request) (any, *apiErr
 			return nil, e
 		}
 		return h.handlePreview(w, r)
+	case "/api/admin/delete":
+		if e := requireMethod(r, http.MethodPost); e != nil {
+			return nil, e
+		}
+		return h.handleDelete(w, r)
+	case "/api/admin/trash":
+		if e := requireMethod(r, http.MethodGet); e != nil {
+			return nil, e
+		}
+		return h.handleTrashList(r)
+	case "/api/admin/trash/restore":
+		if e := requireMethod(r, http.MethodPost); e != nil {
+			return nil, e
+		}
+		return h.handleTrashRestore(w, r)
+	case "/api/admin/trash/purge":
+		if e := requireMethod(r, http.MethodPost); e != nil {
+			return nil, e
+		}
+		return h.handleTrashPurge(w, r)
+	case "/api/admin/trash/empty":
+		if e := requireMethod(r, http.MethodPost); e != nil {
+			return nil, e
+		}
+		return h.handleTrashEmpty(w, r)
 	default:
 		return nil, newAPIError(http.StatusNotFound, "接口不存在")
 	}

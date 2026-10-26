@@ -8,6 +8,9 @@ import type {
   AdminUploadResult,
   ApiEnvelope,
   PreviewResult,
+  TrashActionResult,
+  TrashData,
+  TrashEntry,
 } from './types'
 
 let csrfToken = ''
@@ -159,6 +162,54 @@ export async function previewSource(
     {
       method: 'POST',
       ...jsonBody({ path, content }),
+    },
+    true,
+  )
+}
+
+export async function deleteEntry(path: string): Promise<TrashEntry> {
+  return adminRequest<TrashEntry>(
+    '/api/admin/delete',
+    {
+      method: 'POST',
+      ...jsonBody({ path }),
+    },
+    true,
+  )
+}
+
+export async function fetchTrash(): Promise<TrashData> {
+  return adminRequest<TrashData>('/api/admin/trash')
+}
+
+export async function restoreTrash(ids: string[]): Promise<TrashActionResult> {
+  return adminRequest<TrashActionResult>(
+    '/api/admin/trash/restore',
+    {
+      method: 'POST',
+      ...jsonBody({ ids }),
+    },
+    true,
+  )
+}
+
+export async function purgeTrash(ids: string[]): Promise<TrashActionResult> {
+  return adminRequest<TrashActionResult>(
+    '/api/admin/trash/purge',
+    {
+      method: 'POST',
+      ...jsonBody({ ids }),
+    },
+    true,
+  )
+}
+
+export async function emptyTrash(): Promise<TrashActionResult> {
+  return adminRequest<TrashActionResult>(
+    '/api/admin/trash/empty',
+    {
+      method: 'POST',
+      ...jsonBody({}),
     },
     true,
   )

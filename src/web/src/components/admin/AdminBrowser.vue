@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 
-import { fetchEntries, saveOrder } from '@/api/admin'
+import { deleteEntry, fetchEntries, saveOrder } from '@/api/admin'
 import { fileUrl } from '@/api/docs'
 import { AdminAuthError } from '@/api/http'
 import type { AdminEntry } from '@/api/types'
 import AdminCreateDialog from '@/components/admin/AdminCreateDialog.vue'
 import AdminUploadDialog from '@/components/admin/AdminUploadDialog.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import {
   fileMark,
   formatBytes,
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   view: [path: string]
   notice: [message: string]
   authExpired: []
+  openTrash: []
 }>()
 
 const entries = ref<AdminEntry[]>([])
@@ -37,6 +39,8 @@ const orderSaving = ref(false)
 const createOpen = ref(false)
 const createKind = ref<'document' | 'folder'>('document')
 const uploadOpen = ref(false)
+const deleteTarget = ref<AdminEntry | null>(null)
+const deleting = ref(false)
 
 const breadcrumbs = computed(() => pathTrail(directory.value))
 const displayEntries = computed(() =>
@@ -175,6 +179,55 @@ function onCreated(path: string): void {
 function onUploaded(): void {
   void load(directory.value)
 }
+
+function requestDelete(entry: AdminEntry): void {
+  deleteTarget.value = entry
+}
+
+function cancelDelete(): void {
+  deleteTarget.value = null
+}
+
+const deleteDescription = computed(() => {
+  const target = deleteTarget.value
+  if (!target) {
+    return ''
+  }
+  if (target.type === 'folder') {
+    return `“${target.name}”及其中的全部内容会移入回收站，只被这些文档引用的素材会一起移入。`
+  }
+  return `“${target.name}”会移入回收站，只被这份文档引用的素材会一起移入。`
+})
+
+async function confirmDelete(): Promise<void> {
+  const target = deleteTarget.value
+  if (!target || deleting.value) {
+    return
+  }
+  deleting.value = true
+  error.value = ''
+  try {
+    const result = await deleteEntry(target.path)
+    deleteTarget.value = null
+    const extra = result.items.length - 1
+    emit(
+      'notice',
+      extra > 0
+        ? `已移入回收站，包含 ${extra} 个关联素材。`
+        : '已移入回收站。',
+    )
+    await load(directory.value)
+  } catch (cause) {
+    if (cause instanceof AdminAuthError) {
+      emit('authExpired')
+      return
+    }
+    error.value =
+      cause instanceof Error ? cause.message : '删除失败，请稍后重试。'
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -219,6 +272,14 @@ function onUploaded(): void {
             @click="startOrder"
           >
             调整排序
+          </button>
+          <button
+            type="button"
+            class="button button-quiet"
+            :disabled="loading"
+            @click="emit('openTrash')"
+          >
+            回收站
           </button>
         </template>
         <template v-else>
@@ -370,6 +431,14 @@ function onUploaded(): void {
                 下载
               </a>
             </template>
+            <button
+              type="button"
+              class="button button-quiet button-danger-text"
+              :aria-label="`删除 ${entry.name}`"
+              @click="requestDelete(entry)"
+            >
+              删除
+            </button>
           </template>
         </div>
       </li>
@@ -391,6 +460,15 @@ function onUploaded(): void {
       @uploaded="onUploaded"
       @notice="emit('notice', $event)"
       @auth-expired="emit('authExpired')"
+    />
+    <ConfirmDialog
+      :open="deleteTarget !== null"
+      title="移入回收站？"
+      :description="deleteDescription"
+      :confirm-text="deleting ? '处理中' : '移入回收站'"
+      :danger="true"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
     />
   </section>
 </template>
