@@ -13,6 +13,9 @@ CLAUDE.md
 0_Backup/
 0_Reference/
 
+# 本地文档数据
+/data/
+
 # 缓存文件夹
 .temp/
 .delete/
