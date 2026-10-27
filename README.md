@@ -11,6 +11,7 @@
 - 删除的文件进入回收站，可还原、单项彻底删除或清空；删除文档时会把只被它引用的素材一起移入回收站。
 - 上传与新建遇到同名文件会拒绝覆盖；编辑带版本校验，防止覆盖其他人的修改。
 - 后台保存后立即更新目录与搜索；从文件系统修改内容时按检查间隔更新。浏览文档不会重命名或改写文件。
+- 提供 Docker 镜像与 Compose 配置，文档目录与 SQLite 元数据通过挂载目录持久化。
 
 ## 构建与启动
 
@@ -24,6 +25,34 @@ make -C src build
 默认只监听本机回环地址，端口自动选择，实际监听地址显示在终端。`src/docs/` 提供通用使用示例；可以通过 `--docs` 指向自己的文档目录，目录必须已经存在。
 
 构建后的程序不需要 PHP、Python、Node 服务或独立数据库服务。SQLite 已嵌入程序，首次启动会在文档目录创建 `.hzk-doc.sqlite`，该目录需要可写；同一个文档库只允许一个程序实例使用。Node.js 仅用于构建前端。生成文件保存在已忽略的 `0_Release/` 和 `dist/` 中，不提交 Git。
+
+## Docker 部署
+
+`src/Dockerfile` 为多阶段构建，前端与 Go 二进制在构建阶段完成，运行镜像基于 Alpine，以 UID 10001 的非 root 用户运行。默认监听 `0.0.0.0:8080`，文档目录为容器内 `/data/docs`。
+
+本地构建镜像（Apple Silicon 需要显式指定目标平台）：
+
+```bash
+docker buildx build --platform linux/amd64 --provenance=false --load \
+  --build-arg VERSION="$(cat VERSION)" \
+  -t hzk-doc:latest -f src/Dockerfile src/
+```
+
+构建阶段需要访问 Go 和 npm 软件源；网络受限时追加 `--build-arg HTTP_PROXY=<代理地址> --build-arg HTTPS_PROXY=<代理地址>`。
+
+发布产物保存在 `0_Release/<版本号>/`，包含镜像归档 `hzk-doc-latest-linux-amd64.tar` 和 `docker-compose.yml`。服务器上导入并启动：
+
+```bash
+mkdir -p data/docs
+docker load --input hzk-doc-latest-linux-amd64.tar
+docker compose up -d
+```
+
+`./data` 挂载到容器内 `/data`，`.hzk-doc.sqlite`、`.hzk-doc-order.json` 和 `.hzk-doc-trash/` 都在其中，备份时必须整体保留。宿主机目录属主需为 10001。启用后台时，启动前设置环境变量 `HZK_DOC_ADMIN_PASSWORD`（至少 12 个字符）：
+
+```bash
+HZK_DOC_ADMIN_PASSWORD='你的管理员密码' docker compose up -d
+```
 
 ## 启用后台
 

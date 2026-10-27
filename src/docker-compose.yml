@@ -1,0 +1,31 @@
+services:
+  hzk_doc:
+    image: hzk-doc:latest
+    container_name: hzk_doc
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - hzk_doc_network
+    restart: unless-stopped
+    environment:
+      HZK_DOC_ADMIN_PASSWORD: ${HZK_DOC_ADMIN_PASSWORD:-}
+    volumes:
+      - ./data:/data
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-Y", "off", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/site"]
+      interval: 10m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  hzk_doc_network:
+    name: hzk_doc_network
+    driver: bridge
