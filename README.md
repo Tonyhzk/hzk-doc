@@ -38,7 +38,13 @@ docker buildx build --platform linux/amd64 --provenance=false --load \
   -t hzk-doc:latest -f src/Dockerfile src/
 ```
 
-构建阶段需要访问 Go 和 npm 软件源；网络受限时追加 `--build-arg HTTP_PROXY=<代理地址> --build-arg HTTPS_PROXY=<代理地址>`。
+构建阶段需要访问 Go 和 npm 软件源；网络受限时追加 `--build-arg HTTP_PROXY=<代理地址> --build-arg HTTPS_PROXY=<代理地址>`。若基础镜像元数据解析失败，先用带代理的容器构建器，再执行同一条构建命令：
+
+```bash
+docker buildx create --name proxybuilder --driver docker-container \
+  --driver-opt env.HTTP_PROXY=<代理地址> --driver-opt env.HTTPS_PROXY=<代理地址>
+docker buildx build --builder proxybuilder ... # 其余参数同上
+```
 
 发布产物保存在 `0_Release/<版本号>/`，包含镜像归档 `hzk-doc-latest-linux-amd64.tar` 和 `docker-compose.yml`。服务器上导入并启动：
 
