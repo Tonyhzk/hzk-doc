@@ -48,10 +48,14 @@ docker load --input hzk-doc-latest-linux-amd64.tar
 docker compose up -d
 ```
 
-`./data` 挂载到容器内 `/data`，`.hzk-doc.sqlite`、`.hzk-doc-order.json` 和 `.hzk-doc-trash/` 都在其中，备份时必须整体保留。宿主机目录属主需为 10001。启用后台时，启动前设置环境变量 `HZK_DOC_ADMIN_PASSWORD`（至少 12 个字符）：
+`./data` 挂载到容器内 `/data`，`.hzk-doc.sqlite`、`.hzk-doc-order.json` 和 `.hzk-doc-trash/` 都在其中，备份时必须整体保留。宿主机目录属主需为 10001。
+
+启用后台时，在 Compose 文件同目录创建 `.env`（不要提交 Git），写入至少 12 个字符的密码后启动：
 
 ```bash
-HZK_DOC_ADMIN_PASSWORD='你的管理员密码' docker compose up -d
+printf 'HZK_DOC_ADMIN_PASSWORD=你的管理员密码\n' > .env
+chmod 600 .env
+docker compose up -d
 ```
 
 ## 启用后台
