@@ -4,7 +4,7 @@
 
 ### 新增
 
-- Markdown 支持单独下载，或连同引用的本地素材打包为 ZIP；压缩包内的同名文件夹包含 Markdown 文件与 `assets` 文件夹。
+- Markdown 支持单独下载，或连同引用的本地素材打包为 ZIP；有素材时，压缩包内的同名文件夹包含 Markdown 文件与 `assets` 文件夹，没有素材时只包含 Markdown 文件。
 
 ### 修复
 

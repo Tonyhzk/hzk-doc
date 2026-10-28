@@ -170,7 +170,10 @@ func (s *Server) documentArchiveEntries(documentPath, folder string, info os.Fil
 	for _, name := range names {
 		entry := entries[name]
 		if name == documentPath {
-			entry.archiveName = path.Join(folder, path.Base(name))
+			entry.archiveName = path.Base(name)
+			if len(entries) > 1 {
+				entry.archiveName = path.Join(folder, entry.archiveName)
+			}
 		} else {
 			filename := path.Base(name)
 			key := norm.NFC.String(fold.String(filename))
@@ -198,7 +201,7 @@ func (s *Server) documentArchiveEntries(documentPath, folder string, info os.Fil
 	for _, name := range names {
 		entry := entries[name]
 		switch {
-		case name == documentPath:
+		case name == documentPath && len(entries) > 1:
 			entry.data = rewriteArchiveMarkdown(entry.data, name, entries)
 		case content.Kind(name) == "html":
 			entry.data = []byte(rewriteArchiveHTML(string(entry.data), name, entries))
@@ -212,11 +215,13 @@ func (s *Server) documentArchiveEntries(documentPath, folder string, info os.Fil
 
 func (s *Server) writeDocumentArchive(output io.Writer, folder string, entries []archiveEntry) error {
 	writer := zip.NewWriter(output)
-	for _, name := range []string{folder + "/", path.Join(folder, "assets") + "/"} {
-		header := &zip.FileHeader{Name: name, Method: zip.Store}
-		header.SetMode(os.ModeDir | 0o755)
-		if _, err := writer.CreateHeader(header); err != nil {
-			return err
+	if len(entries) > 1 {
+		for _, name := range []string{folder + "/", path.Join(folder, "assets") + "/"} {
+			header := &zip.FileHeader{Name: name, Method: zip.Store}
+			header.SetMode(os.ModeDir | 0o755)
+			if _, err := writer.CreateHeader(header); err != nil {
+				return err
+			}
 		}
 	}
 	for _, entry := range entries {

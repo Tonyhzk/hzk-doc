@@ -231,6 +231,48 @@ func TestDocumentArchiveEscapesSrcsetFilename(t *testing.T) {
 	}
 }
 
+func TestDocumentArchiveWithoutResources(t *testing.T) {
+	root := t.TempDir()
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{name: "notes/empty.md", source: ""},
+		{name: "notes/page.md", source: "# 文档\n![外部](https://example.com/p.png)\n[其他文档](other.md)\n"},
+		{name: "notes/self.md", source: "# 自引用\n[自身](/notes/self.md)\n"},
+	}
+	for _, test := range tests {
+		writeTestFile(t, root, test.name, []byte(test.source))
+	}
+	writeTestFile(t, root, "notes/other.md", []byte("另一个文档"))
+	server := newTestServer(t, root, nil)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			id := documentIDFor(t, server, test.name)
+			response := request(server, http.MethodGet, "/api/doc/archive?id="+id)
+			if response.Code != http.StatusOK {
+				t.Fatalf("状态码 = %d，响应 = %s", response.Code, response.Body.String())
+			}
+			reader, err := zip.NewReader(bytes.NewReader(response.Body.Bytes()), int64(response.Body.Len()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(reader.File) != 1 || reader.File[0].Name != filepath.Base(test.name) || reader.File[0].FileInfo().IsDir() {
+				t.Fatalf("ZIP 条目 = %v", reader.File)
+			}
+			file, err := reader.File[0].Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(file)
+			_ = file.Close()
+			if err != nil || string(data) != test.source {
+				t.Fatalf("文档内容 = %q, err = %v", data, err)
+			}
+		})
+	}
+}
+
 func TestDocumentArchiveRejectsUnsafeAndMissingPaths(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
@@ -250,13 +292,8 @@ func TestDocumentArchiveRejectsUnsafeAndMissingPaths(t *testing.T) {
 		t.Fatalf("状态码 = %d，响应 = %s", response.Code, response.Body.String())
 	}
 	archive := archiveFiles(t, response.Body.Bytes())
-	if len(archive) != 3 || archive["page/page.md"] == "" {
+	if len(archive) != 1 || archive["page.md"] == "" {
 		t.Fatalf("ZIP 包含不安全或不存在的素材: %v", archive)
-	}
-	for _, name := range []string{"page/", "page/assets/"} {
-		if _, exists := archive[name]; !exists {
-			t.Errorf("缺少 ZIP 目录: %s", name)
-		}
 	}
 	for target, want := range map[string]int{
 		"/api/doc/archive":            http.StatusBadRequest,
