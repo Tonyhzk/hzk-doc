@@ -86,45 +86,148 @@ func TestDocumentArchiveIncludesResourcesAndRelativePaths(t *testing.T) {
 		t.Fatalf("错误的下载文件名: %v %v", disposition, err)
 	}
 	archive := archiveFiles(t, response.Body.Bytes())
-	if len(archive) != len(files)-1 {
+	if len(archive) != len(files)+1 {
 		t.Fatalf("ZIP 文件 = %v", archive)
+	}
+	for _, name := range []string{"page/", "page/assets/", "page/page.md"} {
+		if _, exists := archive[name]; !exists {
+			t.Errorf("缺少 ZIP 条目: %s", name)
+		}
 	}
 	for name, expected := range files {
 		if name == "notes/deep/other.md" || strings.HasSuffix(name, ".md") || strings.HasSuffix(name, ".html") || strings.HasSuffix(name, ".css") {
 			continue
 		}
-		if archive[name] != expected {
-			t.Errorf("素材 %s = %q, want %q", name, archive[name], expected)
+		archiveName := "page/assets/" + filepath.Base(name)
+		if archive[archiveName] != expected {
+			t.Errorf("素材 %s = %q, want %q", archiveName, archive[archiveName], expected)
 		}
 	}
 	for _, expected := range []string{
-		"![共享](../../assets/pic%20one.png?v=2#view)",
-		"![本地](images/local.png)",
-		"![根目录](../../shared/logo.png)",
-		"[picture]: <../../assets/%E4%B8%AD%E6%96%87%20%281%29.png> \"说明\"",
-		"![转义](../../assets/a%281%29.png)",
-		"![实体](../../assets/a&b.png)",
-		"[附件](../../assets/manual.pdf)",
-		"[网页](../../assets/example.html)",
+		"![共享](assets/pic%20one.png?v=2#view)",
+		"![本地](assets/local.png)",
+		"![根目录](assets/logo.png)",
+		"[picture]: <assets/%E4%B8%AD%E6%96%87%20%281%29.png> \"说明\"",
+		"![转义](assets/a%281%29.png)",
+		"![实体](assets/a&amp;b.png)",
+		"[附件](assets/manual.pdf)",
+		"[网页](assets/example.html)",
 		"[文档](other.md)",
-		`poster="../../assets/poster.jpg"`,
-		`src="../../assets/clip.mp4"`,
-		`srcset="../../assets/pic%20one.png 1x, ../../shared/logo.png 2x"`,
+		`poster="assets/poster.jpg"`,
+		`src="assets/clip.mp4"`,
+		`srcset="assets/pic%20one.png 1x, assets/logo.png 2x"`,
 		"![外链](https://example.com/a.png)",
 		"```md\n![示例](assets/pic%20one.png)\n```",
 	} {
-		if !strings.Contains(archive["notes/deep/page.md"], expected) {
-			t.Errorf("导出的 Markdown 缺少 %q\n%s", expected, archive["notes/deep/page.md"])
+		if !strings.Contains(archive["page/page.md"], expected) {
+			t.Errorf("导出的 Markdown 缺少 %q\n%s", expected, archive["page/page.md"])
 		}
 	}
 	for name, expected := range map[string]string{
-		"assets/example.html":   `href="theme.css"`,
-		"assets/theme.css":      `url('../shared/logo.png')`,
-		"assets/theme/base.css": `url('../../shared/font.woff2')`,
+		"page/assets/example.html": `href="theme.css"`,
+		"page/assets/theme.css":    `url('logo.png')`,
+		"page/assets/base.css":     `url('font.woff2')`,
 	} {
 		if !strings.Contains(archive[name], expected) {
 			t.Errorf("%s 缺少 %q: %s", name, expected, archive[name])
 		}
+	}
+}
+
+func TestDocumentArchiveRenamesConflictingResources(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"notes/page.md":         "![共享](assets/logo.png)\n![本地](images/logo.png)\n![大小写](/shared/Logo.png)\n![编号](/other/logo-2.png)\n[网页](assets/demo.html)\n",
+		"assets/logo.png":       "shared",
+		"notes/images/logo.png": "local",
+		"shared/Logo.png":       "case",
+		"other/logo-2.png":      "numbered",
+		"assets/demo.html":      `<link rel="stylesheet" href="site.css"><img src="/notes/images/logo.png">`,
+		"assets/site.css":       `.x { background: url('/shared/Logo.png'); }`,
+	}
+	for name, data := range files {
+		writeTestFile(t, root, name, []byte(data))
+	}
+	server := newTestServer(t, root, nil)
+	id := documentIDFor(t, server, "notes/page.md")
+	response := request(server, http.MethodGet, "/api/doc/archive?id="+id)
+	if response.Code != http.StatusOK {
+		t.Fatalf("状态码 = %d，响应 = %s", response.Code, response.Body.String())
+	}
+	archive := archiveFiles(t, response.Body.Bytes())
+	if len(archive) != len(files)+2 {
+		t.Fatalf("ZIP 文件 = %v", archive)
+	}
+	for name, expected := range map[string]string{
+		"page/assets/logo.png":     "shared",
+		"page/assets/logo-2.png":   "local",
+		"page/assets/Logo-3.png":   "case",
+		"page/assets/logo-2-2.png": "numbered",
+	} {
+		if archive[name] != expected {
+			t.Errorf("素材 %s = %q, want %q", name, archive[name], expected)
+		}
+	}
+	for name, parts := range map[string][]string{
+		"page/page.md":          {"![共享](assets/logo.png)", "![本地](assets/logo-2.png)", "![大小写](assets/Logo-3.png)", "![编号](assets/logo-2-2.png)", "[网页](assets/demo.html)"},
+		"page/assets/demo.html": {`href="site.css"`, `src="logo-2.png"`},
+		"page/assets/site.css":  {`url('Logo-3.png')`},
+	} {
+		for _, part := range parts {
+			if !strings.Contains(archive[name], part) {
+				t.Errorf("%s 缺少 %q: %s", name, part, archive[name])
+			}
+		}
+	}
+}
+
+func TestDocumentArchiveRenamesUnicodeEquivalentResources(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "page.md", []byte("![a](/one/%C3%A9.png)\n![b](/two/e%CC%81.png)\n![c](/three/%CE%A3.png)\n![d](/four/%CF%82.png)\n"))
+	writeTestFile(t, root, "one/é.png", []byte("composed"))
+	writeTestFile(t, root, "two/é.png", []byte("decomposed"))
+	writeTestFile(t, root, "three/Σ.png", []byte("upper"))
+	writeTestFile(t, root, "four/ς.png", []byte("lower"))
+	server := newTestServer(t, root, nil)
+	id := documentIDFor(t, server, "page.md")
+	response := request(server, http.MethodGet, "/api/doc/archive?id="+id)
+	if response.Code != http.StatusOK {
+		t.Fatalf("状态码 = %d，响应 = %s", response.Code, response.Body.String())
+	}
+	archive := archiveFiles(t, response.Body.Bytes())
+	for name, expected := range map[string]string{
+		"page/assets/é.png":    "composed",
+		"page/assets/é-2.png": "decomposed",
+		"page/assets/ς.png":    "lower",
+		"page/assets/Σ-2.png":  "upper",
+	} {
+		if archive[name] != expected {
+			t.Errorf("等价文件名 %s = %q, want %q", name, archive[name], expected)
+		}
+	}
+	for _, part := range []string{"assets/e%CC%81-2.png", "assets/%CE%A3-2.png"} {
+		if !strings.Contains(archive["page/page.md"], part) {
+			t.Errorf("重名素材引用缺少 %q: %s", part, archive["page/page.md"])
+		}
+	}
+}
+
+func TestDocumentArchiveEscapesSrcsetFilename(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "page.md", []byte(`<img srcset="/shared/logo%2C2.png 1x">`))
+	writeTestFile(t, root, "shared/logo,2.png", []byte("image"))
+	server := newTestServer(t, root, nil)
+	id := documentIDFor(t, server, "page.md")
+	response := request(server, http.MethodGet, "/api/doc/archive?id="+id)
+	if response.Code != http.StatusOK {
+		t.Fatalf("状态码 = %d，响应 = %s", response.Code, response.Body.String())
+	}
+	archive := archiveFiles(t, response.Body.Bytes())
+	if archive["page/assets/logo,2.png"] != "image" {
+		t.Fatalf("ZIP 素材 = %v", archive)
+	}
+	if !strings.Contains(archive["page/page.md"], `srcset="assets/logo%2C2.png 1x"`) {
+		t.Fatalf("srcset 路径错误: %s", archive["page/page.md"])
 	}
 }
 
@@ -147,8 +250,13 @@ func TestDocumentArchiveRejectsUnsafeAndMissingPaths(t *testing.T) {
 		t.Fatalf("状态码 = %d，响应 = %s", response.Code, response.Body.String())
 	}
 	archive := archiveFiles(t, response.Body.Bytes())
-	if len(archive) != 1 || archive["page.md"] == "" {
+	if len(archive) != 3 || archive["page/page.md"] == "" {
 		t.Fatalf("ZIP 包含不安全或不存在的素材: %v", archive)
+	}
+	for _, name := range []string{"page/", "page/assets/"} {
+		if _, exists := archive[name]; !exists {
+			t.Errorf("缺少 ZIP 目录: %s", name)
+		}
 	}
 	for target, want := range map[string]int{
 		"/api/doc/archive":            http.StatusBadRequest,

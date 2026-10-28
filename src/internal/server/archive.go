@@ -20,6 +20,8 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	"golang.org/x/net/html"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 
 	"hzk-doc/internal/content"
 )
@@ -32,9 +34,10 @@ const (
 var errArchiveTooLarge = errors.New("素材数量或文本总量超过打包上限")
 
 type archiveEntry struct {
-	name string
-	info os.FileInfo
-	data []byte
+	name        string
+	archiveName string
+	info        os.FileInfo
+	data        []byte
 }
 
 func (s *Server) handleDocumentArchive(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +71,8 @@ func (s *Server) handleDocumentArchive(w http.ResponseWriter, r *http.Request) {
 		s.writeReadError(w, meta.Path, err)
 		return
 	}
-	entries, err := s.documentArchiveEntries(meta.Path, info, source)
+	folder := strings.TrimSuffix(path.Base(meta.Path), path.Ext(meta.Path))
+	entries, err := s.documentArchiveEntries(meta.Path, folder, info, source)
 	if err != nil {
 		if errors.Is(err, errArchiveTooLarge) || errors.Is(err, errDocumentTooLarge) {
 			writeError(w, http.StatusRequestEntityTooLarge, "素材数量或文本总量超过打包上限")
@@ -79,7 +83,7 @@ func (s *Server) handleDocumentArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename := strings.TrimSuffix(path.Base(meta.Path), path.Ext(meta.Path)) + ".zip"
+	filename := folder + ".zip"
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	w.Header().Set("Cache-Control", "no-store")
@@ -87,7 +91,7 @@ func (s *Server) handleDocumentArchive(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	if err := s.writeDocumentArchive(w, entries); err != nil {
+	if err := s.writeDocumentArchive(w, folder, entries); err != nil {
 		s.logger.Error("输出文档压缩包失败", "path", meta.Path, "error", err)
 	}
 }
@@ -115,7 +119,7 @@ func (s *Server) readArchiveSource(name string, expected os.FileInfo) ([]byte, e
 	return data, nil
 }
 
-func (s *Server) documentArchiveEntries(documentPath string, info os.FileInfo, source []byte) ([]archiveEntry, error) {
+func (s *Server) documentArchiveEntries(documentPath, folder string, info os.FileInfo, source []byte) ([]archiveEntry, error) {
 	entries := map[string]archiveEntry{
 		documentPath: {name: documentPath, info: info, data: source},
 	}
@@ -160,6 +164,36 @@ func (s *Server) documentArchiveEntries(documentPath string, info os.FileInfo, s
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	usedNames := make(map[string]bool)
+	nextSuffix := make(map[string]int)
+	fold := cases.Fold()
+	for _, name := range names {
+		entry := entries[name]
+		if name == documentPath {
+			entry.archiveName = path.Join(folder, path.Base(name))
+		} else {
+			filename := path.Base(name)
+			key := norm.NFC.String(fold.String(filename))
+			candidate := filename
+			if usedNames[key] {
+				extension := path.Ext(filename)
+				stem := strings.TrimSuffix(filename, extension)
+				suffix := nextSuffix[key]
+				if suffix < 2 {
+					suffix = 2
+				}
+				for usedNames[norm.NFC.String(fold.String(candidate))] {
+					candidate = fmt.Sprintf("%s-%d%s", stem, suffix, extension)
+					suffix++
+				}
+				nextSuffix[key] = suffix
+			}
+			usedNames[norm.NFC.String(fold.String(candidate))] = true
+			entry.archiveName = path.Join(folder, "assets", candidate)
+		}
+		entries[name] = entry
+	}
+
 	result := make([]archiveEntry, 0, len(names))
 	for _, name := range names {
 		entry := entries[name]
@@ -176,14 +210,21 @@ func (s *Server) documentArchiveEntries(documentPath string, info os.FileInfo, s
 	return result, nil
 }
 
-func (s *Server) writeDocumentArchive(output io.Writer, entries []archiveEntry) error {
+func (s *Server) writeDocumentArchive(output io.Writer, folder string, entries []archiveEntry) error {
 	writer := zip.NewWriter(output)
+	for _, name := range []string{folder + "/", path.Join(folder, "assets") + "/"} {
+		header := &zip.FileHeader{Name: name, Method: zip.Store}
+		header.SetMode(os.ModeDir | 0o755)
+		if _, err := writer.CreateHeader(header); err != nil {
+			return err
+		}
+	}
 	for _, entry := range entries {
 		header, err := zip.FileInfoHeader(entry.info)
 		if err != nil {
 			return err
 		}
-		header.Name = entry.name
+		header.Name = entry.archiveName
 		header.SetMode(0o644)
 		header.Method = zip.Store
 		if entry.data != nil {
@@ -362,15 +403,17 @@ func archiveRelativeURL(raw, name string, entries map[string]archiveEntry) strin
 	if !ok {
 		return raw
 	}
-	if _, exists := entries[target]; !exists {
+	entry, exists := entries[target]
+	if !exists {
 		return raw
 	}
-	relative, err := filepath.Rel(filepath.FromSlash(path.Dir(name)), filepath.FromSlash(target))
+	relative, err := filepath.Rel(filepath.FromSlash(path.Dir(entries[name].archiveName)), filepath.FromSlash(entry.archiveName))
 	if err != nil {
 		return raw
 	}
 	parsed.Path = filepath.ToSlash(relative)
 	parsed.RawPath = ""
+	parsed.RawPath = strings.ReplaceAll(parsed.EscapedPath(), ",", "%2C")
 	return parsed.String()
 }
 
