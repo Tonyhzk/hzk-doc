@@ -65,6 +65,7 @@ const document = ref<DocumentData | null>(null)
 const docState = ref<DocState>('idle')
 const docError = ref('')
 const toc = ref<TocItem[]>([])
+const articleElement = ref<HTMLElement | null>(null)
 const searchOpen = ref(false)
 const drawerOpen = ref(false)
 let docController: AbortController | null = null
@@ -72,7 +73,7 @@ let docController: AbortController | null = null
 const currentId = computed(() => parseIdParam(route.query.id))
 const currentPath = computed(() => document.value?.path ?? '')
 const neighbors = computed(() =>
-  documentNeighbors(tree.value, currentId.value),
+  documentNeighbors(tree.value, document.value?.id ?? currentId.value),
 )
 const currentFolders = computed(() => folderTrail(currentPath.value))
 const effectiveToc = computed<TocItem[]>(() => {
@@ -85,9 +86,7 @@ const effectiveToc = computed<TocItem[]>(() => {
 })
 const showToc = computed(
   () =>
-    docState.value === 'ready' &&
-    document.value?.type === 'markdown' &&
-    effectiveToc.value.length > 0,
+    document.value?.type === 'markdown' && effectiveToc.value.length > 0,
 )
 const wideDocument = computed(() =>
   ['pdf', 'docx', 'xlsx', 'pptx', 'video', 'html'].includes(
@@ -97,8 +96,9 @@ const wideDocument = computed(() =>
 const noTocLayout = computed(
   () =>
     Boolean(currentId.value) &&
-    docState.value !== 'loading' &&
-    document.value?.type !== 'markdown',
+    (document.value
+      ? document.value.type !== 'markdown'
+      : docState.value !== 'loading'),
 )
 const docMeta = computed(() => {
   const current = document.value
@@ -198,10 +198,15 @@ async function loadTree(): Promise<void> {
 async function loadDocument(id: string): Promise<void> {
   docController?.abort()
   docController = null
-  toc.value = []
-  document.value = null
+  if (document.value && document.value.id !== id) {
+    articleElement.value?.querySelectorAll<HTMLMediaElement>('audio, video').forEach((media) => {
+      media.pause()
+    })
+  }
 
   if (!id) {
+    toc.value = []
+    document.value = null
     docState.value = 'idle'
     docError.value = ''
     window.document.title = site.name
@@ -218,11 +223,14 @@ async function loadDocument(id: string): Promise<void> {
     if (controller.signal.aborted) {
       return
     }
+    toc.value = []
     document.value = data
     docState.value = 'ready'
     window.document.title = `${data.title} · ${site.name}`
     await nextTick()
-    scrollToHash()
+    if (!controller.signal.aborted) {
+      scrollToHash()
+    }
   } catch (error) {
     if (controller.signal.aborted) {
       return
@@ -230,6 +238,7 @@ async function loadDocument(id: string): Promise<void> {
     if (error instanceof DOMException && error.name === 'AbortError') {
       return
     }
+    toc.value = []
     document.value = null
     docError.value =
       error instanceof Error ? error.message : '文档加载失败，请稍后重试。'
@@ -392,7 +401,15 @@ onBeforeUnmount(() => {
         />
       </aside>
 
-      <main id="main-content" class="reader-main" tabindex="-1">
+      <main
+        id="main-content"
+        class="reader-main"
+        tabindex="-1"
+        :aria-busy="docState === 'loading'"
+      >
+        <div v-if="docState === 'loading' && document" class="document-loading" role="status">
+          正在加载文档…
+        </div>
         <section v-if="!currentId" class="overview">
           <header class="overview-header">
             <h1>{{ site.name }}</h1>
@@ -472,7 +489,7 @@ onBeforeUnmount(() => {
         </section>
 
         <div
-          v-else-if="docState === 'loading'"
+          v-else-if="docState === 'loading' && !document"
           class="article-skeleton"
           aria-busy="true"
           aria-label="正在加载文档"
@@ -507,9 +524,11 @@ onBeforeUnmount(() => {
         </section>
 
         <article
-          v-else-if="docState === 'ready' && document"
+          v-else-if="document"
+          ref="articleElement"
           class="article"
           :class="{ 'article-wide': wideDocument }"
+          :inert="docState === 'loading' ? true : undefined"
         >
           <nav class="breadcrumbs" aria-label="面包屑">
             <RouterLink to="/">文档</RouterLink>
@@ -612,7 +631,7 @@ onBeforeUnmount(() => {
         </article>
       </main>
 
-      <aside v-if="showToc" class="toc-rail">
+      <aside v-if="showToc" class="toc-rail" :inert="docState === 'loading' ? true : undefined">
         <TocNav :items="effectiveToc" />
       </aside>
     </div>
