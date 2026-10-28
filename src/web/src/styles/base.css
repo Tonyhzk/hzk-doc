@@ -7,7 +7,12 @@
 html {
   min-width: 320px;
   background: var(--bg);
+  scrollbar-width: none;
   -webkit-text-size-adjust: 100%;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {

@@ -36,22 +36,6 @@
   overflow-y: auto;
   border-right: 1px solid var(--border);
   scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
-}
-
-@supports not (scrollbar-color: auto) {
-  .sidebar::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .sidebar::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: var(--border-strong);
-  }
-
-  .sidebar::-webkit-scrollbar-thumb:hover {
-    background: var(--text-faint);
-  }
 }
 
 .sidebar-title {
