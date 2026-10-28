@@ -319,6 +319,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/site", s.handleSite)
 	mux.HandleFunc("GET /api/tree", s.handleTree)
 	mux.HandleFunc("GET /api/doc", s.handleDoc)
+	mux.HandleFunc("GET /api/doc/archive", s.handleDocumentArchive)
 	mux.HandleFunc("GET /api/search", s.handleSearch)
 	mux.HandleFunc("GET /file", s.handleFile)
 	mux.HandleFunc("HEAD /file", s.handleFile)

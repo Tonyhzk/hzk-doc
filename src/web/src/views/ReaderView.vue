@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
+  documentArchiveUrl,
   documentFileUrl,
   fetchDocument,
   fetchTree,
@@ -66,6 +67,7 @@ const docState = ref<DocState>('idle')
 const docError = ref('')
 const toc = ref<TocItem[]>([])
 const articleElement = ref<HTMLElement | null>(null)
+const downloadMenu = ref<HTMLDetailsElement | null>(null)
 const searchOpen = ref(false)
 const drawerOpen = ref(false)
 let docController: AbortController | null = null
@@ -563,18 +565,34 @@ onBeforeUnmount(() => {
               >
                 分享
               </button>
-              <button
+              <details
                 v-if="
                   canDownload &&
                   document.type === 'markdown' &&
                   document.rawContent !== undefined
                 "
-                type="button"
-                class="button button-quiet"
-                @click="downloadDocument"
+                ref="downloadMenu"
+                class="download-menu"
               >
-                下载
-              </button>
+                <summary class="button button-quiet">下载</summary>
+                <div class="download-options">
+                  <button
+                    type="button"
+                    class="button button-quiet"
+                    @click="downloadDocument(); downloadMenu!.open = false"
+                  >
+                    仅 Markdown
+                  </button>
+                  <a
+                    class="button button-quiet"
+                    :href="documentArchiveUrl(document.id)"
+                    download
+                    @click="downloadMenu!.open = false"
+                  >
+                    含素材 ZIP
+                  </a>
+                </div>
+              </details>
               <a
                 v-else-if="canDownload"
                 class="button button-quiet"

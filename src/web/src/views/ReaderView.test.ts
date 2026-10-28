@@ -102,6 +102,70 @@ afterEach(() => {
   for (const app of apps.splice(0)) app.unmount()
   document.body.replaceChildren()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+describe('阅读页下载', () => {
+  it('Markdown 可选择原文件或含素材的压缩包，其他文件保留原下载方式', async () => {
+    const NativeURL = URL
+    const createObjectURL = vi.fn((_value: Blob | MediaSource) => 'blob:test')
+    vi.stubGlobal('URL', class extends NativeURL {
+      static createObjectURL = createObjectURL
+      static revokeObjectURL = vi.fn()
+    })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const root = mount('a')
+    requests[0]!.resolve({ ...documentData('a'), rawContent: '# 内容' })
+    await flush()
+
+    const menu = root.querySelector<HTMLDetailsElement>('.download-menu')!
+    const markdown = menu.querySelector<HTMLButtonElement>('button')!
+    const archive = menu.querySelector<HTMLAnchorElement>('a')!
+    expect(archive.getAttribute('href')).toBe('/api/doc/archive?id=a')
+    expect(archive.hasAttribute('download')).toBe(true)
+    menu.open = true
+    markdown.click()
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect(createObjectURL.mock.calls[0]![0]).toBeInstanceOf(Blob)
+    expect(click).toHaveBeenCalledOnce()
+    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe('a.md')
+    expect(menu.open).toBe(false)
+
+    menu.open = true
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    event.preventDefault()
+    archive.dispatchEvent(event)
+    expect(menu.open).toBe(false)
+
+    mocks.route.query.id = 'pdf'
+    await flush()
+    requests[1]!.resolve(documentData('pdf', 'pdf'))
+    await flush()
+    expect(root.querySelector('.download-menu')).toBeNull()
+    expect(root.querySelector('.article-actions a[download]')?.getAttribute('href')).toBe('/file?id=pdf&download=1')
+  })
+
+  it('空 Markdown 也可选择原文件或压缩包', async () => {
+    const NativeURL = URL
+    const createObjectURL = vi.fn((_value: Blob | MediaSource) => 'blob:test')
+    vi.stubGlobal('URL', class extends NativeURL {
+      static createObjectURL = createObjectURL
+      static revokeObjectURL = vi.fn()
+    })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const root = mount('empty')
+    requests[0]!.resolve({ ...documentData('empty'), rawContent: '' })
+    await flush()
+
+    const menu = root.querySelector<HTMLDetailsElement>('.download-menu')!
+    expect(menu.querySelector('a')?.getAttribute('href')).toBe('/api/doc/archive?id=empty')
+    menu.open = true
+    menu.querySelector<HTMLButtonElement>('button')!.click()
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect((createObjectURL.mock.calls[0]![0] as Blob).size).toBe(0)
+    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe('empty.md')
+    expect(menu.open).toBe(false)
+  })
 })
 
 describe('阅读页文档切换', () => {

@@ -9,6 +9,10 @@ export function documentFileUrl(id: string, download = false): string {
   return `/file?id=${encodeURIComponent(id)}${download ? '&download=1' : ''}`
 }
 
+export function documentArchiveUrl(id: string): string {
+  return `/api/doc/archive?id=${encodeURIComponent(id)}`
+}
+
 export function htmlViewUrl(id: string): string {
   return `/view/html?id=${encodeURIComponent(id)}`
 }
