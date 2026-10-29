@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { deleteEntry, fetchEntries, saveOrder } from '@/api/admin'
 import { documentFileUrl, fileUrl } from '@/api/docs'
@@ -38,6 +38,15 @@ const error = ref('')
 const orderMode = ref(false)
 const orderDirty = ref(false)
 const orderSaving = ref(false)
+const dragPath = ref('')
+const dragPointer = ref<number | null>(null)
+const dropTarget = ref<{ path: string; after: boolean } | null>(null)
+const entryList = ref<HTMLUListElement | null>(null)
+const orderAnnouncement = ref('')
+let dragHandle: HTMLElement | null = null
+let dragX = 0
+let dragY = 0
+let scrollFrame = 0
 const createOpen = ref(false)
 const createKind = ref<'document' | 'folder'>('document')
 const uploadOpen = ref(false)
@@ -59,10 +68,13 @@ onMounted(() => {
   void load('')
 })
 
+onBeforeUnmount(resetDrag)
+
 async function load(path: string): Promise<void> {
   const sequence = ++loadSequence
   loading.value = true
   error.value = ''
+  resetDrag()
   orderMode.value = false
   orderDirty.value = false
   try {
@@ -141,9 +153,11 @@ function startOrder(): void {
   orderedEntries.value = entries.value.slice()
   orderMode.value = true
   orderDirty.value = false
+  orderAnnouncement.value = ''
 }
 
 function cancelOrder(): void {
+  resetDrag()
   orderMode.value = false
   orderDirty.value = false
   orderedEntries.value = entries.value.slice()
@@ -153,12 +167,123 @@ function moveEntry(index: number, delta: number): void {
   if (!canMove(index, orderedEntries.value.length, delta)) {
     return
   }
+  const name = orderedEntries.value[index]!.name
   orderedEntries.value = moveItemBy(orderedEntries.value, index, delta)
-  orderDirty.value = true
+  orderDirty.value = orderedEntries.value.some(
+    (entry, position) => entry.path !== entries.value[position]?.path,
+  )
+  orderAnnouncement.value = `${name} 已移动到第 ${index + delta + 1} 位。`
+}
+
+function resetDrag(): void {
+  const pointer = dragPointer.value
+  dragPointer.value = null
+  dragPath.value = ''
+  dropTarget.value = null
+  if (scrollFrame) {
+    window.cancelAnimationFrame(scrollFrame)
+    scrollFrame = 0
+  }
+  if (pointer !== null && dragHandle?.hasPointerCapture(pointer)) {
+    dragHandle.releasePointerCapture(pointer)
+  }
+  dragHandle = null
+}
+
+function startDrag(event: PointerEvent, path: string): void {
+  if (!orderMode.value || orderSaving.value || dragPointer.value !== null || event.button !== 0) {
+    return
+  }
+  event.preventDefault()
+  dragPointer.value = event.pointerId
+  dragPath.value = path
+  dragHandle = event.currentTarget as HTMLElement
+  dragHandle.setPointerCapture(event.pointerId)
+}
+
+function updateDropTarget(x: number, y: number): void {
+  const row = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-order-path]')
+  if (!row || !entryList.value?.contains(row) || !row.dataset.orderPath || row.dataset.orderPath === dragPath.value) {
+    dropTarget.value = null
+    return
+  }
+  const bounds = row.getBoundingClientRect()
+  dropTarget.value = {
+    path: row.dataset.orderPath,
+    after: y >= bounds.top + bounds.height / 2,
+  }
+}
+
+function scrollWhileDragging(): void {
+  scrollFrame = 0
+  if (dragPointer.value === null || dragY < 0 || dragY > window.innerHeight) {
+    return
+  }
+  const speed = dragY < 64 ? -12 : dragY > window.innerHeight - 64 ? 12 : 0
+  if (!speed) {
+    return
+  }
+  const previousY = window.scrollY
+  window.scrollBy(0, speed)
+  updateDropTarget(dragX, dragY)
+  if (window.scrollY !== previousY) {
+    scrollFrame = window.requestAnimationFrame(scrollWhileDragging)
+  }
+}
+
+function moveDrag(event: PointerEvent): void {
+  if (event.pointerId !== dragPointer.value) {
+    return
+  }
+  dragX = event.clientX
+  dragY = event.clientY
+  updateDropTarget(dragX, dragY)
+  if (!scrollFrame) {
+    scrollFrame = window.requestAnimationFrame(scrollWhileDragging)
+  }
+}
+
+function finishDrag(event: PointerEvent): void {
+  if (event.pointerId !== dragPointer.value) {
+    return
+  }
+  updateDropTarget(event.clientX, event.clientY)
+  const source = orderedEntries.value.findIndex((entry) => entry.path === dragPath.value)
+  const target = dropTarget.value
+  resetDrag()
+  if (source < 0 || !target) {
+    return
+  }
+  const over = orderedEntries.value.findIndex((entry) => entry.path === target.path)
+  if (over < 0) {
+    return
+  }
+  let destination = over + (target.after ? 1 : 0)
+  if (destination > source) {
+    destination--
+  }
+  moveEntry(source, destination - source)
+}
+
+function cancelDrag(event: PointerEvent): void {
+  if (event.pointerId === dragPointer.value) {
+    resetDrag()
+  }
+}
+
+function moveWithKeyboard(event: KeyboardEvent, index: number): void {
+  const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
+  if (orderSaving.value || dragPointer.value !== null || !canMove(index, orderedEntries.value.length, delta)) {
+    return
+  }
+  event.preventDefault()
+  const handle = event.currentTarget as HTMLElement
+  moveEntry(index, delta)
+  void nextTick(() => handle.focus())
 }
 
 async function persistOrder(): Promise<void> {
-  if (orderSaving.value || !orderDirty.value) {
+  if (orderSaving.value || dragPointer.value !== null || !orderDirty.value) {
     return
   }
   orderSaving.value = true
@@ -326,12 +451,12 @@ async function confirmDelete(): Promise<void> {
           <button
             type="button"
             class="button button-primary"
-            :disabled="orderSaving || !orderDirty"
+            :disabled="orderSaving || dragPointer !== null || !orderDirty"
             @click="persistOrder"
           >
             {{ orderSaving ? '保存中' : '保存排序' }}
           </button>
-          <button type="button" class="button" @click="cancelOrder">
+          <button type="button" class="button" :disabled="orderSaving" @click="cancelOrder">
             取消
           </button>
         </template>
@@ -363,9 +488,10 @@ async function confirmDelete(): Promise<void> {
       </template>
     </nav>
 
-    <p v-if="orderMode" class="order-hint" role="status">
-      使用上移、下移调整当前目录的顺序，保存后刷新目录。
+    <p v-if="orderMode" class="order-hint">
+      拖动手柄调整顺序，完成后保存。
     </p>
+    <p class="visually-hidden" role="status" aria-live="polite">{{ orderAnnouncement }}</p>
 
     <div v-if="error" class="banner banner-error" role="alert">
       <p>{{ error }}</p>
@@ -387,13 +513,41 @@ async function confirmDelete(): Promise<void> {
       这个目录还是空的。可以新建文档、创建目录或上传文件。
     </p>
 
-    <ul v-else-if="displayEntries.length > 0" class="entry-list">
+    <ul v-else-if="displayEntries.length > 0" ref="entryList" class="entry-list">
       <li
         v-for="(entry, index) in displayEntries"
         :key="entry.path"
         class="entry-row"
-        :class="{ 'is-folder': entry.type === 'folder' }"
+        :data-order-path="orderMode ? entry.path : undefined"
+        :class="{
+          'is-folder': entry.type === 'folder',
+          'is-dragging': dragPath === entry.path,
+          'drop-before': dropTarget?.path === entry.path && !dropTarget.after,
+          'drop-after': dropTarget?.path === entry.path && dropTarget.after,
+        }"
       >
+        <button
+          v-if="orderMode"
+          type="button"
+          class="button button-quiet order-handle"
+          :disabled="orderSaving"
+          :aria-label="`拖动或使用方向键排序 ${entry.name}`"
+          @pointerdown="startDrag($event, entry.path)"
+          @pointermove="moveDrag"
+          @pointerup="finishDrag"
+          @pointercancel="cancelDrag"
+          @lostpointercapture="cancelDrag"
+          @keydown="moveWithKeyboard($event, index)"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <circle cx="7" cy="5" r="1.5" />
+            <circle cx="13" cy="5" r="1.5" />
+            <circle cx="7" cy="10" r="1.5" />
+            <circle cx="13" cy="10" r="1.5" />
+            <circle cx="7" cy="15" r="1.5" />
+            <circle cx="13" cy="15" r="1.5" />
+          </svg>
+        </button>
         <div class="entry-main">
           <span v-if="entry.type === 'file'" class="file-mark" aria-hidden="true">
             {{ fileMark(entry.kind, entry.path) }}
@@ -411,84 +565,62 @@ async function confirmDelete(): Promise<void> {
           <span class="entry-meta">{{ entryMeta(entry) }}</span>
         </div>
 
-        <div class="entry-actions">
-          <template v-if="orderMode">
-            <button
-              type="button"
-              class="button button-quiet"
-              :disabled="!canMove(index, displayEntries.length, -1)"
-              :aria-label="`上移 ${entry.name}`"
-              @click="moveEntry(index, -1)"
-            >
-              上移
-            </button>
-            <button
-              type="button"
-              class="button button-quiet"
-              :disabled="!canMove(index, displayEntries.length, 1)"
-              :aria-label="`下移 ${entry.name}`"
-              @click="moveEntry(index, 1)"
-            >
-              下移
-            </button>
-          </template>
+        <div v-if="!orderMode" class="entry-actions">
+          <button
+            v-if="entry.type === 'folder'"
+            type="button"
+            class="button button-quiet"
+            :aria-label="`打开 ${entry.name}`"
+            @click="openDirectory(entry.path)"
+          >
+            打开
+          </button>
           <template v-else>
             <button
-              v-if="entry.type === 'folder'"
+              v-if="entry.id"
               type="button"
               class="button button-quiet"
-              :aria-label="`打开 ${entry.name}`"
-              @click="openDirectory(entry.path)"
+              :aria-label="`查看 ${entry.name}`"
+              @click="emit('view', entry.id)"
             >
-              打开
+              查看
             </button>
-            <template v-else>
-              <button
-                v-if="entry.id"
-                type="button"
-                class="button button-quiet"
-                :aria-label="`查看 ${entry.name}`"
-                @click="emit('view', entry.id)"
-              >
-                查看
-              </button>
-              <button
-                v-if="entry.editable"
-                type="button"
-                class="button button-quiet"
-                :aria-label="`编辑 ${entry.name}`"
-                @click="emit('edit', entry.path)"
-              >
-                编辑
-              </button>
-              <button
-                v-if="canRenameEntry(entry)"
-                type="button"
-                class="button button-quiet"
-                :aria-label="`重命名 ${entry.name}`"
-                @click="requestRename(entry)"
-              >
-                改名
-              </button>
-              <a
-                v-if="canDownloadEntry(entry)"
-                class="button button-quiet"
-                :aria-label="`下载 ${entry.name}`"
-                :href="entryFileUrl(entry, true)"
-                download
-              >
-                下载
-              </a>
-            </template>
             <button
+              v-if="entry.editable"
               type="button"
-              class="button button-quiet button-danger-text"
-              :aria-label="`删除 ${entry.name}`"
-              @click="requestDelete(entry)"
+              class="button button-quiet"
+              :aria-label="`编辑 ${entry.name}`"
+              @click="emit('edit', entry.path)"
             >
-              删除
+              编辑
             </button>
+            <button
+              v-if="canRenameEntry(entry)"
+              type="button"
+              class="button button-quiet"
+              :aria-label="`重命名 ${entry.name}`"
+              @click="requestRename(entry)"
+            >
+              改名
+            </button>
+            <a
+              v-if="canDownloadEntry(entry)"
+              class="button button-quiet"
+              :aria-label="`下载 ${entry.name}`"
+              :href="entryFileUrl(entry, true)"
+              download
+            >
+              下载
+            </a>
           </template>
+          <button
+            type="button"
+            class="button button-quiet button-danger-text"
+            :aria-label="`删除 ${entry.name}`"
+            @click="requestDelete(entry)"
+          >
+            删除
+          </button>
         </div>
       </li>
     </ul>
