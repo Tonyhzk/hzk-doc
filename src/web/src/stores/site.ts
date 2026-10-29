@@ -1,7 +1,7 @@
 import { reactive, ref } from 'vue'
 
 import { fetchSite } from '@/api/site'
-import type { SiteInfo } from '@/api/types'
+import type { SiteInfo, SiteTheme } from '@/api/types'
 
 export type SiteState = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -10,6 +10,7 @@ const site = reactive<SiteInfo>({
   version: '',
   count: 0,
   adminEnabled: false,
+  theme: 'classic',
 })
 
 const state = ref<SiteState>('idle')
@@ -28,6 +29,7 @@ async function loadSite(): Promise<boolean> {
     try {
       const info = await fetchSite()
       Object.assign(site, info)
+      applySiteTheme(info.theme)
       state.value = 'ready'
       return true
     } catch {
@@ -40,6 +42,13 @@ async function loadSite(): Promise<boolean> {
   return pending
 }
 
+function applySiteTheme(theme: SiteTheme): void {
+  site.theme = theme
+  if (typeof document !== 'undefined') {
+    document.documentElement.dataset.palette = theme
+  }
+}
+
 export function useSiteStore() {
-  return { site, loadSite }
+  return { site, loadSite, applySiteTheme }
 }

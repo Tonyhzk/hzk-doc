@@ -17,11 +17,14 @@ export interface TreeFile {
 
 export type TreeEntry = TreeFolder | TreeFile
 
+export type SiteTheme = 'classic' | 'forest' | 'mono'
+
 export interface SiteInfo {
   name: string
   version: string
   count: number
   adminEnabled: boolean
+  theme: SiteTheme
 }
 
 export interface TocItem {

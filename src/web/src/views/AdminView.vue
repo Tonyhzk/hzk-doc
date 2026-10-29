@@ -13,10 +13,11 @@ import {
   setAdminToken,
 } from '@/api/admin'
 import { AdminAuthError } from '@/api/http'
-import type { AdminRenameResult } from '@/api/types'
+import type { AdminRenameResult, SiteTheme } from '@/api/types'
 import AdminBrowser from '@/components/admin/AdminBrowser.vue'
 import AdminEditor from '@/components/admin/AdminEditor.vue'
 import AdminLogin from '@/components/admin/AdminLogin.vue'
+import AdminThemeDialog from '@/components/admin/AdminThemeDialog.vue'
 import AdminTrash from '@/components/admin/AdminTrash.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
@@ -28,7 +29,7 @@ import { useSiteStore } from '@/stores/site'
 type Phase = 'loading' | 'error' | 'disabled' | 'login' | 'ready'
 
 const router = useRouter()
-const { site, loadSite } = useSiteStore()
+const { site, loadSite, applySiteTheme } = useSiteStore()
 const { message, notify } = useNotice()
 
 const phase = ref<Phase>('loading')
@@ -40,6 +41,7 @@ const workspaceMounted = ref(false)
 const activePath = ref('')
 const editorDirty = ref(false)
 const trashOpen = ref(false)
+const themeOpen = ref(false)
 const browserRef = ref<InstanceType<typeof AdminBrowser> | null>(null)
 
 const confirmOpen = ref(false)
@@ -124,6 +126,7 @@ async function submitLogin(password: string): Promise<void> {
 }
 
 function handleAuthExpired(): void {
+  themeOpen.value = false
   setAdminToken(undefined)
   loginError.value = '登录已过期，请重新登录。'
   phase.value = 'login'
@@ -167,6 +170,19 @@ async function performLogout(): Promise<void> {
   phase.value = 'login'
   logoutBusy.value = false
   notify('已退出登录。')
+}
+
+async function openTheme(): Promise<void> {
+  if (await loadSite()) {
+    themeOpen.value = true
+  } else {
+    notify('站点信息加载失败，请重试。')
+  }
+}
+
+function onThemeSaved(theme: SiteTheme): void {
+  applySiteTheme(theme)
+  notify('主题已保存。')
 }
 
 function openEditor(path: string): void {
@@ -256,6 +272,14 @@ function discardAndNavigate(): void {
         </RouterLink>
         <div class="header-actions">
           <ThemeToggle />
+          <button
+            v-if="workspaceMounted && phase === 'ready'"
+            type="button"
+            class="button button-quiet"
+            @click="openTheme"
+          >
+            主题
+          </button>
           <RouterLink class="button button-quiet" to="/">阅读</RouterLink>
           <button
             v-if="workspaceMounted && phase === 'ready'"
@@ -345,6 +369,13 @@ function discardAndNavigate(): void {
     </main>
 
     <ToastNotice :message="message" />
+    <AdminThemeDialog
+      :open="themeOpen"
+      :theme="site.theme"
+      @close="themeOpen = false"
+      @saved="onThemeSaved"
+      @auth-expired="handleAuthExpired"
+    />
     <ConfirmDialog
       :open="confirmOpen"
       :title="confirmTitle"

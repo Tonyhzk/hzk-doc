@@ -289,7 +289,14 @@ body:has(dialog[open]) {
 }
 
 .theme-toggle {
-  min-width: 52px;
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+}
+
+.theme-toggle svg {
+  width: 19px;
+  height: 19px;
 }
 
 .site-footer {
@@ -671,7 +678,8 @@ dialog::backdrop {
   }
 
   .theme-toggle {
-    min-width: 48px;
+    width: 40px;
+    min-width: 40px;
   }
 
   .site-footer {

@@ -106,6 +106,71 @@ func TestManagementUpdatesReader(t *testing.T) {
 	request(t, client, "GET", app.URL+"/api/admin/source?path="+url.QueryEscape(name), nil, "", 401)
 }
 
+func TestSiteThemeManagementAndRestart(t *testing.T) {
+	docs := t.TempDir()
+	run := func(setTheme bool) string {
+		store, err := catalog.Open(docs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer store.Close()
+		reader, err := server.New(server.Config{Catalog: store, DocsDir: docs, AdminEnabled: true}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer reader.Close()
+		manager, err := admin.New(admin.Config{Catalog: store, DocsDir: docs, Password: "integration-test-password"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer manager.Close()
+		mux := http.NewServeMux()
+		mux.Handle("/api/admin/", manager)
+		mux.Handle("/", reader)
+		app := httptest.NewServer(mux)
+		defer app.Close()
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client := &http.Client{Jar: jar}
+		if setTheme {
+			initial := request(t, client, "GET", app.URL+"/api/site", nil, "", 200)
+			var site struct {
+				Theme string `json:"theme"`
+			}
+			if err := json.Unmarshal(initial, &site); err != nil || site.Theme != "classic" {
+				t.Fatalf("默认主题 = %s, %v", initial, err)
+			}
+			request(t, client, "PUT", app.URL+"/api/admin/theme", map[string]string{"theme": "mono"}, "", 401)
+			login := request(t, client, "POST", app.URL+"/api/admin/login", map[string]string{"password": "integration-test-password"}, "", 200)
+			var session struct {
+				CSRFToken string `json:"csrfToken"`
+			}
+			if err := json.Unmarshal(login, &session); err != nil || session.CSRFToken == "" {
+				t.Fatalf("登录会话不可用: %s, %v", login, err)
+			}
+			request(t, client, "PUT", app.URL+"/api/admin/theme", map[string]string{"theme": "mono"}, "", 403)
+			request(t, client, "PUT", app.URL+"/api/admin/theme", map[string]string{"theme": "invalid"}, session.CSRFToken, 400)
+			request(t, client, "PUT", app.URL+"/api/admin/theme", map[string]string{"theme": "mono"}, session.CSRFToken, 200)
+		}
+		response := request(t, &http.Client{}, "GET", app.URL+"/api/site", nil, "", 200)
+		var site struct {
+			Theme string `json:"theme"`
+		}
+		if err := json.Unmarshal(response, &site); err != nil {
+			t.Fatalf("站点信息无效: %s, %v", response, err)
+		}
+		return site.Theme
+	}
+	if got := run(true); got != "mono" {
+		t.Fatalf("保存后的主题 = %q", got)
+	}
+	if got := run(false); got != "mono" {
+		t.Fatalf("重启后的主题 = %q", got)
+	}
+}
+
 func request(t *testing.T, client *http.Client, method, address string, payload any, token string, wantStatus int) json.RawMessage {
 	t.Helper()
 	var body io.Reader

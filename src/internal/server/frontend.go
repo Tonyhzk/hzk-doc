@@ -14,13 +14,20 @@ type siteConfig struct {
 	Version      string `json:"version"`
 	Count        int    `json:"count"`
 	AdminEnabled bool   `json:"adminEnabled"`
+	Theme        string `json:"theme"`
 }
 
 func (s *Server) handleSite(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo()})
+	theme, err := s.catalog.SiteTheme()
+	if err != nil {
+		s.logger.Error("读取主题失败", "error", err)
+		writeError(w, http.StatusInternalServerError, "读取站点信息失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo(theme)})
 }
 
-func (s *Server) siteInfo() siteConfig {
+func (s *Server) siteInfo(theme string) siteConfig {
 	count := 0
 	if current := s.current(); current != nil {
 		count = len(current.docs)
@@ -30,6 +37,7 @@ func (s *Server) siteInfo() siteConfig {
 		Version:      s.config.Version,
 		Count:        count,
 		AdminEnabled: s.config.AdminEnabled,
+		Theme:        theme,
 	}
 }
 

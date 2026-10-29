@@ -9,6 +9,7 @@ import type {
   AdminUploadResult,
   ApiEnvelope,
   PreviewResult,
+  SiteTheme,
   TrashActionResult,
   TrashData,
   TrashEntry,
@@ -87,6 +88,14 @@ export async function logout(): Promise<AdminSession> {
   )
   setAdminToken(undefined)
   return session
+}
+
+export async function saveSiteTheme(theme: SiteTheme): Promise<{ theme: SiteTheme }> {
+  return adminRequest<{ theme: SiteTheme }>(
+    '/api/admin/theme',
+    { method: 'PUT', ...jsonBody({ theme }) },
+    true,
+  )
 }
 
 export async function fetchEntries(directory: string): Promise<AdminEntries> {

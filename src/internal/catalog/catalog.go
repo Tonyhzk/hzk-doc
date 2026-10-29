@@ -136,6 +136,34 @@ func (s *Store) Close() error {
 	return errors.Join(s.db.Close(), s.root.Close(), s.lock.Close())
 }
 
+func ValidSiteTheme(theme string) bool {
+	return theme == "classic" || theme == "forest" || theme == "mono"
+}
+
+func (s *Store) SiteTheme() (string, error) {
+	var theme string
+	err := s.db.QueryRow("SELECT value FROM metadata WHERE key='site_theme'").Scan(&theme)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "classic", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !ValidSiteTheme(theme) {
+		return "classic", nil
+	}
+	return theme, nil
+}
+
+func (s *Store) SetSiteTheme(theme string) error {
+	if !ValidSiteTheme(theme) {
+		return errors.New("主题无效")
+	}
+	_, err := s.db.Exec(`INSERT INTO metadata(key,value) VALUES('site_theme',?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, theme)
+	return err
+}
+
 func NewID() string {
 	var bytes [16]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
