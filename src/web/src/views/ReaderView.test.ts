@@ -145,6 +145,26 @@ describe('阅读页下载', () => {
     expect(root.querySelector('.article-actions a[download]')?.getAttribute('href')).toBe('/file?id=pdf&download=1')
   })
 
+  it('点击菜单外部关闭菜单，内部点击保持打开', async () => {
+    const addListener = vi.spyOn(document, 'addEventListener')
+    const removeListener = vi.spyOn(document, 'removeEventListener')
+    const root = mount('a')
+    requests[0]!.resolve({ ...documentData('a'), rawContent: '# 内容', hasAssets: true })
+    await flush()
+
+    const menu = root.querySelector<HTMLDetailsElement>('.download-menu')!
+    menu.open = true
+    menu.querySelector('.download-options')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(menu.open).toBe(true)
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(menu.open).toBe(false)
+
+    const listener = addListener.mock.calls.find(([type]) => type === 'click')?.[1]
+    expect(listener).toBeDefined()
+    apps.pop()!.unmount()
+    expect(removeListener).toHaveBeenCalledWith('click', listener)
+  })
+
   it.each([
     { id: 'empty', content: '' },
     { id: 'plain', content: '# 没有素材' },

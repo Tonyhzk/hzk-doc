@@ -345,6 +345,13 @@ function downloadDocument(): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+function onDocumentClick(event: MouseEvent): void {
+  const menu = downloadMenu.value
+  if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) {
+    menu.open = false
+  }
+}
+
 function onGlobalKeydown(event: KeyboardEvent): void {
   if (
     (event.metaKey || event.ctrlKey) &&
@@ -361,10 +368,12 @@ function onGlobalKeydown(event: KeyboardEvent): void {
 onMounted(() => {
   void loadSite()
   void loadTree()
+  window.document.addEventListener('click', onDocumentClick)
   window.addEventListener('keydown', onGlobalKeydown)
 })
 
 onBeforeUnmount(() => {
+  window.document.removeEventListener('click', onDocumentClick)
   window.removeEventListener('keydown', onGlobalKeydown)
   docController?.abort()
 })
