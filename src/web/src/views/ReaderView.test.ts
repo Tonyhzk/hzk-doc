@@ -24,9 +24,11 @@ vi.mock('@/api/docs', async (importOriginal) => ({
   fetchTree: mocks.fetchTree,
 }))
 
+const site = reactive({ name: '测试站点', count: 0, adminEnabled: false, downloadEnabled: true })
+
 vi.mock('@/stores/site', () => ({
   useSiteStore: () => ({
-    site: { name: '测试站点', count: 0, adminEnabled: false },
+    site,
     loadSite: vi.fn(),
   }),
 }))
@@ -87,6 +89,7 @@ function mount(id: string): HTMLElement {
 }
 
 beforeEach(() => {
+  site.downloadEnabled = true
   requests.length = 0
   mocks.fetchDocument.mockReset()
   mocks.fetchTree.mockReset()
@@ -106,6 +109,31 @@ afterEach(() => {
 })
 
 describe('阅读页下载', () => {
+  it('关闭下载设置时隐藏入口，开启后重新显示', async () => {
+    site.downloadEnabled = false
+    const root = mount('a')
+    requests[0]!.resolve({ ...documentData('a'), rawContent: '# 内容', hasAssets: true })
+    await flush()
+
+    expect(root.querySelector('.download-menu')).toBeNull()
+    expect(root.querySelectorAll('.article-actions button')).toHaveLength(2)
+    site.downloadEnabled = true
+    await nextTick()
+    expect(root.querySelector('.download-menu')).not.toBeNull()
+    site.downloadEnabled = false
+    await nextTick()
+    expect(root.querySelector('.download-menu')).toBeNull()
+
+    mocks.route.query.id = 'pdf'
+    await flush()
+    requests[1]!.resolve(documentData('pdf', 'pdf'))
+    await flush()
+    expect(root.querySelector('.article-actions a[download]')).toBeNull()
+    site.downloadEnabled = true
+    await nextTick()
+    expect(root.querySelector('.article-actions a[download]')).not.toBeNull()
+  })
+
   it('Markdown 可选择原文件或含素材的压缩包，其他文件保留原下载方式', async () => {
     const NativeURL = URL
     const createObjectURL = vi.fn((_value: Blob | MediaSource) => 'blob:test')

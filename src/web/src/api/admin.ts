@@ -106,6 +106,14 @@ export async function saveSiteTheme(theme: SiteTheme): Promise<{ theme: SiteThem
   )
 }
 
+export async function saveDownloadEnabled(downloadEnabled: boolean): Promise<{ downloadEnabled: boolean }> {
+  return adminRequest<{ downloadEnabled: boolean }>(
+    '/api/admin/download',
+    { method: 'POST', ...jsonBody({ downloadEnabled }) },
+    true,
+  )
+}
+
 export async function fetchEntries(directory: string): Promise<AdminEntries> {
   const query = directory ? `?dir=${encodeURIComponent(directory)}` : ''
   return adminRequest<AdminEntries>(`/api/admin/entries${query}`)

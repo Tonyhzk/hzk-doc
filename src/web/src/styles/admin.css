@@ -21,6 +21,7 @@
 }
 
 .site-name-form,
+.site-download-form,
 .site-theme-form {
   display: grid;
   gap: 8px;
@@ -35,6 +36,20 @@
 .site-name-controls .text-input {
   min-width: 0;
   flex: 1;
+}
+
+.site-download-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.site-download-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
 .theme-options {

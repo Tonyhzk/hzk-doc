@@ -12,6 +12,7 @@ import {
 
 const props = defineProps<{
   document: DocumentData
+  downloadEnabled: boolean
 }>()
 
 interface SheetRow {
@@ -80,8 +81,7 @@ async function load(): Promise<void> {
     if (signal.aborted) {
       return
     }
-    error.value =
-      cause instanceof Error ? cause.message : '文档解析失败，请下载原文件查看。'
+    error.value = cause instanceof Error ? cause.message : '文档解析失败。'
   } finally {
     if (!signal.aborted) {
       loading.value = false
@@ -217,7 +217,7 @@ function cellText(value: unknown): string {
   <section class="office-preview" :aria-label="`${typeLabel}预览`">
     <div class="office-toolbar">
       <span class="office-type">{{ typeLabel }}</span>
-      <a class="button button-quiet" :href="downloadHref" download>
+      <a v-if="downloadEnabled" class="button button-quiet" :href="downloadHref" download>
         下载
       </a>
     </div>
@@ -262,7 +262,7 @@ function cellText(value: unknown): string {
           </table>
         </div>
         <p v-if="sheet.truncated" class="preview-note">
-          仅显示前 200 行、30 列，完整内容请下载原文件。
+          仅显示前 200 行、30 列。<template v-if="downloadEnabled">完整内容请下载原文件。</template>
         </p>
       </section>
     </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 
-import { saveSiteName, saveSiteTheme } from '@/api/admin'
+import { saveDownloadEnabled, saveSiteName, saveSiteTheme } from '@/api/admin'
 import { AdminAuthError } from '@/api/http'
 import type { SiteTheme } from '@/api/types'
 
@@ -9,11 +9,13 @@ const props = defineProps<{
   open: boolean
   name: string
   theme: SiteTheme
+  downloadEnabled: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   nameSaved: [name: string]
+  downloadSaved: [downloadEnabled: boolean]
   saved: [theme: SiteTheme]
   authExpired: []
 }>()
@@ -28,6 +30,9 @@ const nameInput = ref<HTMLInputElement | null>(null)
 const siteName = ref('')
 const nameBusy = ref(false)
 const nameError = ref('')
+const downloadSelection = ref(false)
+const downloadBusy = ref(false)
+const downloadError = ref('')
 const selection = ref<SiteTheme>('classic')
 const busy = ref(false)
 const error = ref('')
@@ -42,6 +47,8 @@ watch(
     if (open) {
       siteName.value = props.name
       nameError.value = ''
+      downloadSelection.value = props.downloadEnabled
+      downloadError.value = ''
       selection.value = props.theme
       error.value = ''
       if (!element.open) {
@@ -57,13 +64,13 @@ watch(
 )
 
 function close(): void {
-  if (!busy.value && !nameBusy.value) {
+  if (!busy.value && !nameBusy.value && !downloadBusy.value) {
     emit('close')
   }
 }
 
 async function submitName(): Promise<void> {
-  if (busy.value || nameBusy.value) {
+  if (busy.value || nameBusy.value || downloadBusy.value) {
     return
   }
   const name = siteName.value.trim()
@@ -89,8 +96,30 @@ async function submitName(): Promise<void> {
   }
 }
 
+async function submitDownload(): Promise<void> {
+  if (busy.value || nameBusy.value || downloadBusy.value) {
+    return
+  }
+  downloadBusy.value = true
+  downloadError.value = ''
+  try {
+    const result = await saveDownloadEnabled(downloadSelection.value)
+    downloadSelection.value = result.downloadEnabled
+    emit('downloadSaved', result.downloadEnabled)
+  } catch (cause) {
+    if (cause instanceof AdminAuthError) {
+      emit('authExpired')
+      emit('close')
+    } else {
+      downloadError.value = cause instanceof Error ? cause.message : '保存失败，请稍后重试。'
+    }
+  } finally {
+    downloadBusy.value = false
+  }
+}
+
 async function submit(): Promise<void> {
-  if (busy.value || nameBusy.value) {
+  if (busy.value || nameBusy.value || downloadBusy.value) {
     return
   }
   busy.value = true
@@ -130,19 +159,36 @@ async function submit(): Promise<void> {
             ref="nameInput"
             v-model="siteName"
             class="text-input"
-            :disabled="busy || nameBusy"
+            :disabled="busy || nameBusy || downloadBusy"
             autocomplete="off"
           />
-          <button type="submit" class="button" :disabled="busy || nameBusy">
+          <button type="submit" class="button" :disabled="busy || nameBusy || downloadBusy">
             {{ nameBusy ? '保存中' : '保存名称' }}
           </button>
         </div>
         <p v-if="nameError" class="form-error" role="alert">{{ nameError }}</p>
       </form>
+      <form class="site-download-form" @submit.prevent="submitDownload">
+        <div class="site-download-controls">
+          <label for="site-download">
+            <input
+              id="site-download"
+              v-model="downloadSelection"
+              type="checkbox"
+              :disabled="busy || nameBusy || downloadBusy"
+            />
+            显示下载按钮
+          </label>
+          <button type="submit" class="button" :disabled="busy || nameBusy || downloadBusy">
+            {{ downloadBusy ? '保存中' : '保存下载' }}
+          </button>
+        </div>
+        <p v-if="downloadError" class="form-error" role="alert">{{ downloadError }}</p>
+      </form>
       <form class="site-theme-form" @submit.prevent="submit">
         <p class="field-label">站点主题</p>
         <p class="form-hint">主题对所有访客生效。</p>
-        <fieldset class="theme-options" :disabled="busy || nameBusy">
+        <fieldset class="theme-options" :disabled="busy || nameBusy || downloadBusy">
           <legend class="visually-hidden">选择主题</legend>
           <label
             v-for="theme in themes"
@@ -160,8 +206,8 @@ async function submit(): Promise<void> {
         </fieldset>
         <p v-if="error" class="form-error" role="alert">{{ error }}</p>
         <div class="dialog-actions">
-          <button type="button" class="button" :disabled="busy || nameBusy" @click="close">关闭</button>
-          <button type="submit" class="button button-primary" :disabled="busy || nameBusy">
+          <button type="button" class="button" :disabled="busy || nameBusy || downloadBusy" @click="close">关闭</button>
+          <button type="submit" class="button button-primary" :disabled="busy || nameBusy || downloadBusy">
             {{ busy ? '保存中' : '保存主题' }}
           </button>
         </div>

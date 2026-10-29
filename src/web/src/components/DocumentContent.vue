@@ -16,6 +16,7 @@ import {
 
 const props = defineProps<{
   document: DocumentData
+  downloadEnabled: boolean
 }>()
 
 const emit = defineEmits<{
@@ -219,7 +220,7 @@ function downloadUrl(): string {
   <div v-else-if="document.type === 'text'" class="text-document">
     <pre v-if="document.rawContent !== undefined" class="text-body">{{ document.rawContent }}</pre>
     <p v-else class="preview-note">
-      文本内容未能加载，可以下载原文件查看。
+      文本内容未能加载。<template v-if="downloadEnabled">可以下载原文件查看。</template>
     </p>
   </div>
 
@@ -235,7 +236,7 @@ function downloadUrl(): string {
         :alt="document.title"
       />
     </button>
-    <figcaption>
+    <figcaption v-if="downloadEnabled">
       <a :href="downloadUrl()" download>下载图片</a>
     </figcaption>
   </figure>
@@ -257,23 +258,23 @@ function downloadUrl(): string {
       :src="documentFileUrl(document.id)"
       :title="document.title"
     ></iframe>
-    <figcaption>
+    <figcaption v-if="downloadEnabled">
       <a :href="documentFileUrl(document.id, true)" download>下载 PDF</a>
     </figcaption>
   </figure>
 
   <div v-else-if="document.type === 'audio'" class="media-document">
-    <audio controls :src="documentFileUrl(document.id)">
+    <audio controls :controlslist="downloadEnabled ? undefined : 'nodownload'" :src="documentFileUrl(document.id)">
       当前浏览器不支持音频播放。
     </audio>
-    <p><a :href="downloadUrl()" download>下载音频</a></p>
+    <p v-if="downloadEnabled"><a :href="downloadUrl()" download>下载音频</a></p>
   </div>
 
   <div v-else-if="document.type === 'video'" class="media-document">
-    <video controls :src="documentFileUrl(document.id)">
+    <video controls :controlslist="downloadEnabled ? undefined : 'nodownload'" :src="documentFileUrl(document.id)">
       当前浏览器不支持视频播放。
     </video>
-    <p><a :href="downloadUrl()" download>下载视频</a></p>
+    <p v-if="downloadEnabled"><a :href="downloadUrl()" download>下载视频</a></p>
   </div>
 
   <OfficePreview
@@ -283,11 +284,12 @@ function downloadUrl(): string {
       document.type === 'pptx'
     "
     :document="document"
+    :download-enabled="downloadEnabled"
   />
 
   <div v-else class="preview-error" role="alert">
     <p>暂不支持预览此格式。</p>
-    <a class="button" :href="downloadUrl()" download>下载</a>
+    <a v-if="downloadEnabled" class="button" :href="downloadUrl()" download>下载</a>
   </div>
 
   <ImageLightbox

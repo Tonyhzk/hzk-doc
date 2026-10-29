@@ -10,11 +10,12 @@ import (
 )
 
 type siteConfig struct {
-	Name         string `json:"name"`
-	Version      string `json:"version"`
-	Count        int    `json:"count"`
-	AdminEnabled bool   `json:"adminEnabled"`
-	Theme        string `json:"theme"`
+	Name            string `json:"name"`
+	Version         string `json:"version"`
+	Count           int    `json:"count"`
+	AdminEnabled    bool   `json:"adminEnabled"`
+	Theme           string `json:"theme"`
+	DownloadEnabled bool   `json:"downloadEnabled"`
 }
 
 func (s *Server) handleSite(w http.ResponseWriter, _ *http.Request) {
@@ -33,20 +34,27 @@ func (s *Server) handleSite(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, "读取站点信息失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo(name, theme)})
+	downloadEnabled, err := s.catalog.DownloadEnabled()
+	if err != nil {
+		s.logger.Error("读取下载开关失败", "error", err)
+		writeError(w, http.StatusInternalServerError, "读取站点信息失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo(name, theme, downloadEnabled)})
 }
 
-func (s *Server) siteInfo(name, theme string) siteConfig {
+func (s *Server) siteInfo(name, theme string, downloadEnabled bool) siteConfig {
 	count := 0
 	if current := s.current(); current != nil {
 		count = len(current.docs)
 	}
 	return siteConfig{
-		Name:         name,
-		Version:      s.config.Version,
-		Count:        count,
-		AdminEnabled: s.config.AdminEnabled,
-		Theme:        theme,
+		Name:            name,
+		Version:         s.config.Version,
+		Count:           count,
+		AdminEnabled:    s.config.AdminEnabled,
+		Theme:           theme,
+		DownloadEnabled: downloadEnabled,
 	}
 }
 

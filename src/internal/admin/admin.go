@@ -240,6 +240,11 @@ func (h *Handler) dispatch(w http.ResponseWriter, r *http.Request) (any, *apiErr
 			return nil, e
 		}
 		return h.handleTheme(w, r)
+	case "/api/admin/download":
+		if e := requireMethod(r, http.MethodPost); e != nil {
+			return nil, e
+		}
+		return h.handleDownload(w, r)
 	case "/api/admin/order":
 		if e := requireMethod(r, http.MethodPut); e != nil {
 			return nil, e

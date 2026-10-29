@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -184,6 +185,24 @@ func (s *Store) SetSiteTheme(theme string) error {
 	}
 	_, err := s.db.Exec(`INSERT INTO metadata(key,value) VALUES('site_theme',?)
 		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, theme)
+	return err
+}
+
+func (s *Store) DownloadEnabled() (bool, error) {
+	var value string
+	err := s.db.QueryRow("SELECT value FROM metadata WHERE key='download_enabled'").Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return value == "true", nil
+}
+
+func (s *Store) SetDownloadEnabled(enabled bool) error {
+	_, err := s.db.Exec(`INSERT INTO metadata(key,value) VALUES('download_enabled',?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, strconv.FormatBool(enabled))
 	return err
 }
 

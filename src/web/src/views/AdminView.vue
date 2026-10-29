@@ -190,6 +190,11 @@ function onSiteNameSaved(name: string): void {
   notify('站点名称已保存。')
 }
 
+function onDownloadSaved(downloadEnabled: boolean): void {
+  site.downloadEnabled = downloadEnabled
+  notify('下载设置已保存。')
+}
+
 function openEditor(path: string): void {
   editorDirty.value = false
   activePath.value = path
@@ -378,8 +383,10 @@ function discardAndNavigate(): void {
       :open="themeOpen"
       :name="site.name"
       :theme="site.theme"
+      :download-enabled="site.downloadEnabled"
       @close="themeOpen = false"
       @name-saved="onSiteNameSaved"
+      @download-saved="onDownloadSaved"
       @saved="onThemeSaved"
       @auth-expired="handleAuthExpired"
     />

@@ -324,6 +324,40 @@ func TestLegacyTrashMigrationAndRestore(t *testing.T) {
 	requireFile(t, dir, "old.md", "old content")
 }
 
+func TestDownloadEnabledDefaultsAndPersists(t *testing.T) {
+	s, dir := testStore(t)
+	if enabled, err := s.DownloadEnabled(); err != nil || enabled {
+		t.Fatalf("默认下载开关 = %v, %v", enabled, err)
+	}
+	if err := s.SetDownloadEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if enabled, err := reopened.DownloadEnabled(); err != nil || !enabled {
+		t.Fatalf("重开后的下载开关 = %v, %v", enabled, err)
+	}
+	if err := reopened.SetDownloadEnabled(false); err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	if enabled, err := again.DownloadEnabled(); err != nil || enabled {
+		t.Fatalf("关闭并重开后的下载开关 = %v, %v", enabled, err)
+	}
+}
+
 func TestInterruptedPurgeResumesAtStartup(t *testing.T) {
 	s, dir := testStore(t)
 	put(t, dir, "a.md", "a")

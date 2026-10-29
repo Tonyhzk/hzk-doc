@@ -37,6 +37,19 @@ func TestSiteAndFrontendServing(t *testing.T) {
 	if !site.Success || site.Data.Name != "测试站" || site.Data.Version != "1.2.3" || !site.Data.AdminEnabled || site.Data.Count != 1 {
 		t.Fatalf("站点信息 = %+v", site.Data)
 	}
+	if site.Data.DownloadEnabled {
+		t.Fatal("默认下载开关应为关闭")
+	}
+	if err := server.catalog.SetDownloadEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	enabledSite := decodeJSON[struct {
+		Success bool       `json:"success"`
+		Data    siteConfig `json:"data"`
+	}](t, request(server, http.MethodGet, "/api/site"))
+	if !enabledSite.Success || !enabledSite.Data.DownloadEnabled {
+		t.Fatalf("启用后的下载开关 = %+v", enabledSite.Data)
+	}
 
 	index := request(server, http.MethodGet, "/")
 	if index.Code != http.StatusOK || index.Body.String() != "<html>app</html>" {

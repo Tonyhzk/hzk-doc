@@ -10,6 +10,7 @@ const site = reactive<SiteInfo>({
   version: '',
   count: 0,
   adminEnabled: false,
+  downloadEnabled: false,
   theme: 'classic',
 })
 

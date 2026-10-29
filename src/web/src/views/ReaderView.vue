@@ -138,7 +138,7 @@ const overviewCards = computed<OverviewCard[]>(() =>
 )
 const canDownload = computed(() => {
   const current = document.value
-  if (!current || current.type === 'html') {
+  if (!site.downloadEnabled || !current || current.type === 'html') {
     return false
   }
   if (current.rawContent !== undefined) {
@@ -631,6 +631,7 @@ onBeforeUnmount(() => {
             <DocumentContent
               :key="document.id"
               :document="document"
+              :download-enabled="site.downloadEnabled"
               @toc="toc = $event"
               @notice="notify"
               @navigate="navigateToTarget"

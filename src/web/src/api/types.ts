@@ -24,6 +24,7 @@ export interface SiteInfo {
   version: string
   count: number
   adminEnabled: boolean
+  downloadEnabled: boolean
   theme: SiteTheme
 }
 

@@ -8,6 +8,7 @@ export async function fetchSite(): Promise<SiteInfo> {
     version: site.version?.trim() || '',
     count: typeof site.count === 'number' ? site.count : 0,
     adminEnabled: site.adminEnabled === true,
+    downloadEnabled: site.downloadEnabled === true,
     theme: site.theme === 'forest' || site.theme === 'mono' ? site.theme : 'classic',
   }
 }
