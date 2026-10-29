@@ -5,6 +5,7 @@ import type { App } from 'vue'
 
 import type { DocumentData, TocItem } from '@/api/types'
 import { ApiError } from '@/api/http'
+import { formatDate } from '@/lib/format'
 import ReaderView from '@/views/ReaderView.vue'
 
 const mocks = vi.hoisted(() => ({
@@ -24,7 +25,10 @@ vi.mock('@/api/docs', async (importOriginal) => ({
   fetchTree: mocks.fetchTree,
 }))
 
-const site = reactive({ name: '测试站点', count: 0, adminEnabled: false, downloadEnabled: true })
+const site = reactive({
+  name: '测试站点', count: 0, adminEnabled: false, downloadEnabled: true,
+  showFileType: false, showFileSize: false,
+})
 
 vi.mock('@/stores/site', () => ({
   useSiteStore: () => ({
@@ -90,6 +94,8 @@ function mount(id: string): HTMLElement {
 
 beforeEach(() => {
   site.downloadEnabled = true
+  site.showFileType = false
+  site.showFileSize = false
   requests.length = 0
   mocks.fetchDocument.mockReset()
   mocks.fetchTree.mockReset()
@@ -106,6 +112,42 @@ afterEach(() => {
   document.body.replaceChildren()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+})
+
+describe('阅读页文章信息', () => {
+  it('默认仅显示更新时间，格式与大小可分别开启和关闭', async () => {
+    const modifiedAt = '2026-10-26T14:43:00+08:00'
+    const root = mount('a')
+    requests[0]!.resolve({ ...documentData('a'), size: 708, modifiedAt })
+    await flush()
+    const meta = root.querySelector('.article-meta')!
+    expect(meta.children).toHaveLength(1)
+    expect(meta.lastElementChild?.textContent).toBe(formatDate(modifiedAt))
+
+    for (const settings of [
+      { showFileType: true, showFileSize: false, count: 2 },
+      { showFileType: true, showFileSize: true, count: 3 },
+      { showFileType: false, showFileSize: true, count: 2 },
+      { showFileType: false, showFileSize: false, count: 1 },
+    ]) {
+      site.showFileType = settings.showFileType
+      site.showFileSize = settings.showFileSize
+      await nextTick()
+      expect(meta.children).toHaveLength(settings.count)
+      expect(meta.lastElementChild?.textContent).toBe(formatDate(modifiedAt))
+    }
+  })
+
+  it('缺少文件大小时仍显示更新时间', async () => {
+    site.showFileSize = true
+    const modifiedAt = '2026-10-26T14:43:00+08:00'
+    const root = mount('a')
+    requests[0]!.resolve({ ...documentData('a'), modifiedAt })
+    await flush()
+    const meta = root.querySelector('.article-meta')!
+    expect(meta.children).toHaveLength(1)
+    expect(meta.lastElementChild?.textContent).toBe(formatDate(modifiedAt))
+  })
 })
 
 describe('阅读页下载', () => {

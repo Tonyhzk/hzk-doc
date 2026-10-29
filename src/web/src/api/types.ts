@@ -19,7 +19,12 @@ export type TreeEntry = TreeFolder | TreeFile
 
 export type SiteTheme = 'classic' | 'forest' | 'mono'
 
-export interface SiteInfo {
+export interface ArticleMetaSettings {
+  showFileType: boolean
+  showFileSize: boolean
+}
+
+export interface SiteInfo extends ArticleMetaSettings {
   name: string
   version: string
   count: number

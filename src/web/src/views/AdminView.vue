@@ -13,7 +13,7 @@ import {
   setAdminToken,
 } from '@/api/admin'
 import { AdminAuthError } from '@/api/http'
-import type { AdminRenameResult, SiteTheme } from '@/api/types'
+import type { AdminRenameResult, ArticleMetaSettings, SiteTheme } from '@/api/types'
 import AdminBrowser from '@/components/admin/AdminBrowser.vue'
 import AdminEditor from '@/components/admin/AdminEditor.vue'
 import AdminLogin from '@/components/admin/AdminLogin.vue'
@@ -193,6 +193,12 @@ function onSiteNameSaved(name: string): void {
 function onDownloadSaved(downloadEnabled: boolean): void {
   site.downloadEnabled = downloadEnabled
   notify('下载设置已保存。')
+}
+
+function onMetaSaved(settings: ArticleMetaSettings): void {
+  site.showFileType = settings.showFileType
+  site.showFileSize = settings.showFileSize
+  notify('文章信息设置已保存。')
 }
 
 function openEditor(path: string): void {
@@ -384,6 +390,9 @@ function discardAndNavigate(): void {
       :name="site.name"
       :theme="site.theme"
       :download-enabled="site.downloadEnabled"
+      :show-file-type="site.showFileType"
+      :show-file-size="site.showFileSize"
+      @meta-saved="onMetaSaved"
       @close="themeOpen = false"
       @name-saved="onSiteNameSaved"
       @download-saved="onDownloadSaved"

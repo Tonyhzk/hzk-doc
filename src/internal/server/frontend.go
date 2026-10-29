@@ -7,6 +7,8 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"hzk-doc/internal/catalog"
 )
 
 type siteConfig struct {
@@ -16,6 +18,8 @@ type siteConfig struct {
 	AdminEnabled    bool   `json:"adminEnabled"`
 	Theme           string `json:"theme"`
 	DownloadEnabled bool   `json:"downloadEnabled"`
+	ShowFileType    bool   `json:"showFileType"`
+	ShowFileSize    bool   `json:"showFileSize"`
 }
 
 func (s *Server) handleSite(w http.ResponseWriter, _ *http.Request) {
@@ -40,10 +44,16 @@ func (s *Server) handleSite(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, "读取站点信息失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo(name, theme, downloadEnabled)})
+	articleMeta, err := s.catalog.ArticleMeta()
+	if err != nil {
+		s.logger.Error("读取文章信息设置失败", "error", err)
+		writeError(w, http.StatusInternalServerError, "读取站点信息失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo(name, theme, downloadEnabled, articleMeta)})
 }
 
-func (s *Server) siteInfo(name, theme string, downloadEnabled bool) siteConfig {
+func (s *Server) siteInfo(name, theme string, downloadEnabled bool, articleMeta catalog.ArticleMeta) siteConfig {
 	count := 0
 	if current := s.current(); current != nil {
 		count = len(current.docs)
@@ -55,6 +65,8 @@ func (s *Server) siteInfo(name, theme string, downloadEnabled bool) siteConfig {
 		AdminEnabled:    s.config.AdminEnabled,
 		Theme:           theme,
 		DownloadEnabled: downloadEnabled,
+		ShowFileType:    articleMeta.ShowFileType,
+		ShowFileSize:    articleMeta.ShowFileSize,
 	}
 }
 

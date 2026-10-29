@@ -358,6 +358,40 @@ func TestDownloadEnabledDefaultsAndPersists(t *testing.T) {
 	}
 }
 
+func TestArticleMetaDefaultsAndPersists(t *testing.T) {
+	s, dir := testStore(t)
+	if meta, err := s.ArticleMeta(); err != nil || meta.ShowFileType || meta.ShowFileSize {
+		t.Fatalf("默认文章信息设置 = %+v, %v", meta, err)
+	}
+	for _, meta := range []ArticleMeta{
+		{ShowFileType: true, ShowFileSize: true},
+		{ShowFileType: true, ShowFileSize: false},
+		{ShowFileType: false, ShowFileSize: true},
+		{ShowFileType: false, ShowFileSize: false},
+	} {
+		if err := s.SetArticleMeta(meta); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := s.ArticleMeta(); err != nil || got != meta {
+			t.Fatalf("保存的文章信息设置 = %+v, %v，预期 %+v", got, err, meta)
+		}
+	}
+	if err := s.SetArticleMeta(ArticleMeta{ShowFileType: true, ShowFileSize: false}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if meta, err := reopened.ArticleMeta(); err != nil || !meta.ShowFileType || meta.ShowFileSize {
+		t.Fatalf("重开后的文章信息设置 = %+v, %v", meta, err)
+	}
+}
+
 func TestInterruptedPurgeResumesAtStartup(t *testing.T) {
 	s, dir := testStore(t)
 	put(t, dir, "a.md", "a")

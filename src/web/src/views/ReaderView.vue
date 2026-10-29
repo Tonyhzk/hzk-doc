@@ -107,15 +107,20 @@ const docMeta = computed(() => {
   if (!current) {
     return []
   }
-  const parts = [kindLabel(current.type)]
-  const size =
-    current.size ??
-    (current.rawContent !== undefined
-      ? new TextEncoder().encode(current.rawContent).length
-      : undefined)
-  const sizeLabel = formatBytes(size)
-  if (sizeLabel) {
-    parts.push(sizeLabel)
+  const parts: string[] = []
+  if (site.showFileType) {
+    parts.push(kindLabel(current.type))
+  }
+  if (site.showFileSize) {
+    const size =
+      current.size ??
+      (current.rawContent !== undefined
+        ? new TextEncoder().encode(current.rawContent).length
+        : undefined)
+    const sizeLabel = formatBytes(size)
+    if (sizeLabel) {
+      parts.push(sizeLabel)
+    }
   }
   const dateLabel = formatDate(current.modifiedAt)
   if (dateLabel) {

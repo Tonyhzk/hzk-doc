@@ -8,6 +8,7 @@ import type {
   AdminSource,
   AdminUploadResult,
   ApiEnvelope,
+  ArticleMetaSettings,
   PreviewResult,
   SiteTheme,
   TrashActionResult,
@@ -110,6 +111,14 @@ export async function saveDownloadEnabled(downloadEnabled: boolean): Promise<{ d
   return adminRequest<{ downloadEnabled: boolean }>(
     '/api/admin/download',
     { method: 'POST', ...jsonBody({ downloadEnabled }) },
+    true,
+  )
+}
+
+export async function saveArticleMeta(settings: ArticleMetaSettings): Promise<ArticleMetaSettings> {
+  return adminRequest<ArticleMetaSettings>(
+    '/api/admin/article-meta',
+    { method: 'POST', ...jsonBody(settings) },
     true,
   )
 }

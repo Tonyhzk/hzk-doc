@@ -11,6 +11,8 @@ const site = reactive<SiteInfo>({
   count: 0,
   adminEnabled: false,
   downloadEnabled: false,
+  showFileType: false,
+  showFileSize: false,
   theme: 'classic',
 })
 

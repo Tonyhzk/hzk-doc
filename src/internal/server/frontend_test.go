@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 	"testing/fstest"
+
+	"hzk-doc/internal/catalog"
 )
 
 func TestSiteAndFrontendServing(t *testing.T) {
@@ -39,6 +41,29 @@ func TestSiteAndFrontendServing(t *testing.T) {
 	}
 	if site.Data.DownloadEnabled {
 		t.Fatal("默认下载开关应为关闭")
+	}
+	if site.Data.ShowFileType || site.Data.ShowFileSize {
+		t.Fatal("默认文章信息开关应为关闭")
+	}
+	if err := server.catalog.SetArticleMeta(catalog.ArticleMeta{ShowFileType: true, ShowFileSize: false}); err != nil {
+		t.Fatal(err)
+	}
+	articleMetaSite := decodeJSON[struct {
+		Success bool       `json:"success"`
+		Data    siteConfig `json:"data"`
+	}](t, request(server, http.MethodGet, "/api/site"))
+	if !articleMetaSite.Success || !articleMetaSite.Data.ShowFileType || articleMetaSite.Data.ShowFileSize {
+		t.Fatalf("文章信息开关 = %+v", articleMetaSite.Data)
+	}
+	if err := server.catalog.SetArticleMeta(catalog.ArticleMeta{ShowFileType: true, ShowFileSize: true}); err != nil {
+		t.Fatal(err)
+	}
+	allMetaSite := decodeJSON[struct {
+		Success bool       `json:"success"`
+		Data    siteConfig `json:"data"`
+	}](t, request(server, http.MethodGet, "/api/site"))
+	if !allMetaSite.Success || !allMetaSite.Data.ShowFileType || !allMetaSite.Data.ShowFileSize {
+		t.Fatalf("全部开启的文章信息开关 = %+v", allMetaSite.Data)
 	}
 	if err := server.catalog.SetDownloadEnabled(true); err != nil {
 		t.Fatal(err)

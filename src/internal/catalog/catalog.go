@@ -206,6 +206,37 @@ func (s *Store) SetDownloadEnabled(enabled bool) error {
 	return err
 }
 
+type ArticleMeta struct {
+	ShowFileType bool `json:"showFileType"`
+	ShowFileSize bool `json:"showFileSize"`
+}
+
+func (s *Store) ArticleMeta() (ArticleMeta, error) {
+	var meta ArticleMeta
+	var value string
+	err := s.db.QueryRow("SELECT value FROM metadata WHERE key='article_meta'").Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return meta, nil
+	}
+	if err != nil {
+		return meta, err
+	}
+	if err := json.Unmarshal([]byte(value), &meta); err != nil {
+		return ArticleMeta{}, err
+	}
+	return meta, nil
+}
+
+func (s *Store) SetArticleMeta(meta ArticleMeta) error {
+	data, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO metadata(key,value) VALUES('article_meta',?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, string(data))
+	return err
+}
+
 func NewID() string {
 	var bytes [16]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
