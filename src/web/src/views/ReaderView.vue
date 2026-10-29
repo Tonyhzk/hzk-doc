@@ -569,7 +569,8 @@ onBeforeUnmount(() => {
                 v-if="
                   canDownload &&
                   document.type === 'markdown' &&
-                  document.rawContent !== undefined
+                  document.rawContent !== undefined &&
+                  document.hasAssets
                 "
                 ref="downloadMenu"
                 class="download-menu"
@@ -593,6 +594,14 @@ onBeforeUnmount(() => {
                   </a>
                 </div>
               </details>
+              <button
+                v-else-if="canDownload && document.type === 'markdown' && document.rawContent !== undefined"
+                type="button"
+                class="button button-quiet"
+                @click="downloadDocument"
+              >
+                下载
+              </button>
               <a
                 v-else-if="canDownload"
                 class="button button-quiet"

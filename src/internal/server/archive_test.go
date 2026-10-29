@@ -3,6 +3,7 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -307,5 +308,66 @@ func TestDocumentArchiveRejectsUnsafeAndMissingPaths(t *testing.T) {
 	head := request(server, http.MethodHead, "/api/doc/archive?id="+id)
 	if head.Code != http.StatusOK || head.Body.Len() != 0 {
 		t.Fatalf("HEAD 状态码 = %d, body = %q", head.Code, head.Body.String())
+	}
+}
+
+func TestDocumentAssetFlagMatchesArchive(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"notes/empty.md":        "",
+		"notes/external.md":     "![外链](https://example.com/a.png)\n[文档](other.md)",
+		"notes/missing.md":      "![缺失](assets/missing.png)",
+		"notes/shared.md":       "![图片](assets/pic.png)",
+		"notes/local.md":        "[附件](docs/report.pdf)",
+		"notes/code.md":         "```md\n![示例](assets/pic.png)\n```",
+		"notes/symlink.md":      "![链接](assets/link.png)",
+		"notes/other.md":        "# 其他文档",
+		"assets/pic.png":        "image",
+		"notes/docs/report.pdf": "pdf",
+	}
+	for name, data := range files {
+		writeTestFile(t, root, name, []byte(data))
+	}
+	outside := t.TempDir()
+	writeTestFile(t, outside, "image.png", []byte("outside"))
+	if err := os.Symlink(filepath.Join(outside, "image.png"), filepath.Join(root, "assets", "link.png")); err != nil {
+		t.Fatal(err)
+	}
+	server := newTestServer(t, root, nil)
+	for _, test := range []struct {
+		name string
+		want bool
+	}{
+		{"notes/empty.md", false},
+		{"notes/external.md", false},
+		{"notes/missing.md", false},
+		{"notes/shared.md", true},
+		{"notes/local.md", true},
+		{"notes/code.md", false},
+		{"notes/symlink.md", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			id := documentIDFor(t, server, test.name)
+			response := request(server, http.MethodGet, "/api/doc?id="+id)
+			if response.Code != http.StatusOK {
+				t.Fatalf("文档接口状态码 = %d", response.Code)
+			}
+			var payload struct {
+				Data struct {
+					HasAssets bool `json:"hasAssets"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			archive := request(server, http.MethodGet, "/api/doc/archive?id="+id)
+			if archive.Code != http.StatusOK {
+				t.Fatalf("压缩包接口状态码 = %d", archive.Code)
+			}
+			containsAssets := len(archiveFiles(t, archive.Body.Bytes())) > 1
+			if payload.Data.HasAssets != test.want || payload.Data.HasAssets != containsAssets {
+				t.Fatalf("素材标记 = %v，ZIP 含素材 = %v，预期 = %v", payload.Data.HasAssets, containsAssets, test.want)
+			}
+		})
 	}
 }

@@ -40,6 +40,7 @@ export interface DocumentData {
   title: string
   content?: string
   rawContent?: string
+  hasAssets?: boolean
   url?: string
   toc?: TocItem[]
   size?: number

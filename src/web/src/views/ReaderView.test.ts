@@ -115,7 +115,7 @@ describe('阅读页下载', () => {
     })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const root = mount('a')
-    requests[0]!.resolve({ ...documentData('a'), rawContent: '# 内容' })
+    requests[0]!.resolve({ ...documentData('a'), rawContent: '# 内容', hasAssets: true })
     await flush()
 
     const menu = root.querySelector<HTMLDetailsElement>('.download-menu')!
@@ -145,7 +145,10 @@ describe('阅读页下载', () => {
     expect(root.querySelector('.article-actions a[download]')?.getAttribute('href')).toBe('/file?id=pdf&download=1')
   })
 
-  it('空 Markdown 也可选择原文件或压缩包', async () => {
+  it.each([
+    { id: 'empty', content: '' },
+    { id: 'plain', content: '# 没有素材' },
+  ])('无素材的 Markdown 直接下载原文件', async ({ id, content }) => {
     const NativeURL = URL
     const createObjectURL = vi.fn((_value: Blob | MediaSource) => 'blob:test')
     vi.stubGlobal('URL', class extends NativeURL {
@@ -153,18 +156,16 @@ describe('阅读页下载', () => {
       static revokeObjectURL = vi.fn()
     })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    const root = mount('empty')
-    requests[0]!.resolve({ ...documentData('empty'), rawContent: '' })
+    const root = mount(id)
+    requests[0]!.resolve({ ...documentData(id), rawContent: content, hasAssets: false })
     await flush()
 
-    const menu = root.querySelector<HTMLDetailsElement>('.download-menu')!
-    expect(menu.querySelector('a')?.getAttribute('href')).toBe('/api/doc/archive?id=empty')
-    menu.open = true
-    menu.querySelector<HTMLButtonElement>('button')!.click()
+    expect(root.querySelector('.download-menu')).toBeNull()
+    const buttons = root.querySelectorAll<HTMLButtonElement>('.article-actions button')
+    buttons[buttons.length - 1]!.click()
     expect(createObjectURL).toHaveBeenCalledOnce()
-    expect((createObjectURL.mock.calls[0]![0] as Blob).size).toBe(0)
-    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe('empty.md')
-    expect(menu.open).toBe(false)
+    expect((createObjectURL.mock.calls[0]![0] as Blob).size).toBe(new Blob([content]).size)
+    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe(`${id}.md`)
   })
 })
 

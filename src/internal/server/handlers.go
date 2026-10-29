@@ -40,6 +40,7 @@ type documentResponse struct {
 	Title      string    `json:"title"`
 	Content    string    `json:"content,omitempty"`
 	RawContent string    `json:"rawContent,omitempty"`
+	HasAssets  bool      `json:"hasAssets,omitempty"`
 	URL        string    `json:"url,omitempty"`
 	Toc        []TocItem `json:"toc"`
 	Size       int64     `json:"size"`
@@ -152,6 +153,7 @@ func (s *Server) handleDoc(w http.ResponseWriter, r *http.Request) {
 		response.Type = "markdown"
 		response.Content = s.documentLinks(rendered, false)
 		response.RawContent = string(source)
+		response.HasAssets = s.hasArchiveResources(relative, source)
 		response.Toc = toc
 	case "html", "htm":
 		response.Type = "html"

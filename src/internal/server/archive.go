@@ -119,6 +119,23 @@ func (s *Server) readArchiveSource(name string, expected os.FileInfo) ([]byte, e
 	return data, nil
 }
 
+func archiveResourceCandidate(documentPath, name string) bool {
+	return name != documentPath && content.ValidatePath(name, false) == nil &&
+		content.AllowedFile(name) && content.Kind(name) != "markdown"
+}
+
+func (s *Server) hasArchiveResources(documentPath string, source []byte) bool {
+	for _, name := range content.ResourceReferences(source, documentPath) {
+		if !archiveResourceCandidate(documentPath, name) {
+			continue
+		}
+		if _, err := regularFileInfo(s.root, name); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) documentArchiveEntries(documentPath, folder string, info os.FileInfo, source []byte) ([]archiveEntry, error) {
 	entries := map[string]archiveEntry{
 		documentPath: {name: documentPath, info: info, data: source},
@@ -128,7 +145,7 @@ func (s *Server) documentArchiveEntries(documentPath, folder string, info os.Fil
 	for len(pending) > 0 {
 		name := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
-		if _, exists := entries[name]; exists || content.ValidatePath(name, false) != nil || !content.AllowedFile(name) || content.Kind(name) == "markdown" {
+		if _, exists := entries[name]; exists || !archiveResourceCandidate(documentPath, name) {
 			continue
 		}
 		info, err := regularFileInfo(s.root, name)
