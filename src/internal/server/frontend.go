@@ -18,22 +18,31 @@ type siteConfig struct {
 }
 
 func (s *Server) handleSite(w http.ResponseWriter, _ *http.Request) {
+	name, err := s.catalog.SiteName()
+	if err != nil {
+		s.logger.Error("读取站点名称失败", "error", err)
+		writeError(w, http.StatusInternalServerError, "读取站点信息失败")
+		return
+	}
+	if name == "" {
+		name = s.config.SiteName
+	}
 	theme, err := s.catalog.SiteTheme()
 	if err != nil {
 		s.logger.Error("读取主题失败", "error", err)
 		writeError(w, http.StatusInternalServerError, "读取站点信息失败")
 		return
 	}
-	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo(theme)})
+	writeJSON(w, http.StatusOK, apiResponse{Success: true, Data: s.siteInfo(name, theme)})
 }
 
-func (s *Server) siteInfo(theme string) siteConfig {
+func (s *Server) siteInfo(name, theme string) siteConfig {
 	count := 0
 	if current := s.current(); current != nil {
 		count = len(current.docs)
 	}
 	return siteConfig{
-		Name:         s.config.SiteName,
+		Name:         name,
 		Version:      s.config.Version,
 		Count:        count,
 		AdminEnabled: s.config.AdminEnabled,

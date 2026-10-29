@@ -171,6 +171,72 @@ func TestSiteThemeManagementAndRestart(t *testing.T) {
 	}
 }
 
+func TestSiteNameManagementAndRestart(t *testing.T) {
+	docs := t.TempDir()
+	run := func(setName bool) string {
+		store, err := catalog.Open(docs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer store.Close()
+		reader, err := server.New(server.Config{
+			Catalog: store, DocsDir: docs, SiteName: "启动名称", AdminEnabled: true,
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer reader.Close()
+		manager, err := admin.New(admin.Config{Catalog: store, DocsDir: docs, Password: "integration-test-password"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer manager.Close()
+		mux := http.NewServeMux()
+		mux.Handle("/api/admin/", manager)
+		mux.Handle("/", reader)
+		app := httptest.NewServer(mux)
+		defer app.Close()
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client := &http.Client{Jar: jar}
+		if setName {
+			initial := request(t, client, "GET", app.URL+"/api/site", nil, "", 200)
+			var site struct {
+				Name string `json:"name"`
+			}
+			if err := json.Unmarshal(initial, &site); err != nil || site.Name != "启动名称" {
+				t.Fatalf("默认站点名称 = %s, %v", initial, err)
+			}
+			request(t, client, "PUT", app.URL+"/api/admin/site-name", map[string]string{"name": "新站点"}, "", 401)
+			login := request(t, client, "POST", app.URL+"/api/admin/login", map[string]string{"password": "integration-test-password"}, "", 200)
+			var session struct {
+				CSRFToken string `json:"csrfToken"`
+			}
+			if err := json.Unmarshal(login, &session); err != nil || session.CSRFToken == "" {
+				t.Fatalf("登录会话不可用: %s, %v", login, err)
+			}
+			request(t, client, "PUT", app.URL+"/api/admin/site-name", map[string]string{"name": "新站点"}, "", 403)
+			request(t, client, "PUT", app.URL+"/api/admin/site-name", map[string]string{"name": "  新站点  "}, session.CSRFToken, 200)
+		}
+		response := request(t, &http.Client{}, "GET", app.URL+"/api/site", nil, "", 200)
+		var site struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(response, &site); err != nil {
+			t.Fatalf("站点信息无效: %s, %v", response, err)
+		}
+		return site.Name
+	}
+	if got := run(true); got != "新站点" {
+		t.Fatalf("保存后的站点名称 = %q", got)
+	}
+	if got := run(false); got != "新站点" {
+		t.Fatalf("重启后的站点名称 = %q", got)
+	}
+}
+
 func request(t *testing.T, client *http.Client, method, address string, payload any, token string, wantStatus int) json.RawMessage {
 	t.Helper()
 	var body io.Reader

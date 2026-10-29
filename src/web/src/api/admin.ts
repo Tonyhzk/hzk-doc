@@ -90,6 +90,14 @@ export async function logout(): Promise<AdminSession> {
   return session
 }
 
+export async function saveSiteName(name: string): Promise<{ name: string }> {
+  return adminRequest<{ name: string }>(
+    '/api/admin/site-name',
+    { method: 'PUT', ...jsonBody({ name }) },
+    true,
+  )
+}
+
 export async function saveSiteTheme(theme: SiteTheme): Promise<{ theme: SiteTheme }> {
   return adminRequest<{ theme: SiteTheme }>(
     '/api/admin/theme',

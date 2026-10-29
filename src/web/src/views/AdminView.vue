@@ -185,6 +185,11 @@ function onThemeSaved(theme: SiteTheme): void {
   notify('主题已保存。')
 }
 
+function onSiteNameSaved(name: string): void {
+  site.name = name
+  notify('站点名称已保存。')
+}
+
 function openEditor(path: string): void {
   editorDirty.value = false
   activePath.value = path
@@ -278,7 +283,7 @@ function discardAndNavigate(): void {
             class="button button-quiet"
             @click="openTheme"
           >
-            主题
+            设置
           </button>
           <RouterLink class="button button-quiet" to="/">阅读</RouterLink>
           <button
@@ -371,8 +376,10 @@ function discardAndNavigate(): void {
     <ToastNotice :message="message" />
     <AdminThemeDialog
       :open="themeOpen"
+      :name="site.name"
       :theme="site.theme"
       @close="themeOpen = false"
+      @name-saved="onSiteNameSaved"
       @saved="onThemeSaved"
       @auth-expired="handleAuthExpired"
     />

@@ -230,6 +230,11 @@ func (h *Handler) dispatch(w http.ResponseWriter, r *http.Request) (any, *apiErr
 			return nil, e
 		}
 		return h.handleUpload(w, r)
+	case "/api/admin/site-name":
+		if e := requireMethod(r, http.MethodPut); e != nil {
+			return nil, e
+		}
+		return h.handleSiteName(w, r)
 	case "/api/admin/theme":
 		if e := requireMethod(r, http.MethodPut); e != nil {
 			return nil, e

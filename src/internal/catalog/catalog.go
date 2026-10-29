@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"hzk-doc/internal/content"
 
@@ -134,6 +135,28 @@ func (s *Store) Recover() error {
 
 func (s *Store) Close() error {
 	return errors.Join(s.db.Close(), s.root.Close(), s.lock.Close())
+}
+
+func ValidSiteName(name string) bool {
+	return name != "" && len([]rune(name)) <= 120 && strings.IndexFunc(name, unicode.IsControl) < 0
+}
+
+func (s *Store) SiteName() (string, error) {
+	var name string
+	err := s.db.QueryRow("SELECT value FROM metadata WHERE key='site_name'").Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return name, err
+}
+
+func (s *Store) SetSiteName(name string) error {
+	if !ValidSiteName(name) {
+		return errors.New("站点名称无效")
+	}
+	_, err := s.db.Exec(`INSERT INTO metadata(key,value) VALUES('site_name',?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, name)
+	return err
 }
 
 func ValidSiteTheme(theme string) bool {

@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 
-import { saveSiteTheme } from '@/api/admin'
+import { saveSiteName, saveSiteTheme } from '@/api/admin'
 import { AdminAuthError } from '@/api/http'
 import type { SiteTheme } from '@/api/types'
 
 const props = defineProps<{
   open: boolean
+  name: string
   theme: SiteTheme
 }>()
 
 const emit = defineEmits<{
   close: []
+  nameSaved: [name: string]
   saved: [theme: SiteTheme]
   authExpired: []
 }>()
@@ -22,6 +24,10 @@ const themes: { value: SiteTheme; name: string }[] = [
   { value: 'mono', name: '黑白' },
 ]
 const dialog = ref<HTMLDialogElement | null>(null)
+const nameInput = ref<HTMLInputElement | null>(null)
+const siteName = ref('')
+const nameBusy = ref(false)
+const nameError = ref('')
 const selection = ref<SiteTheme>('classic')
 const busy = ref(false)
 const error = ref('')
@@ -34,13 +40,15 @@ watch(
       return
     }
     if (open) {
+      siteName.value = props.name
+      nameError.value = ''
       selection.value = props.theme
       error.value = ''
       if (!element.open) {
         element.showModal()
       }
       await nextTick()
-      element.querySelector<HTMLInputElement>('input:checked')?.focus()
+      nameInput.value?.focus()
     } else if (element.open) {
       element.close()
     }
@@ -49,13 +57,40 @@ watch(
 )
 
 function close(): void {
-  if (!busy.value) {
+  if (!busy.value && !nameBusy.value) {
     emit('close')
   }
 }
 
+async function submitName(): Promise<void> {
+  if (busy.value || nameBusy.value) {
+    return
+  }
+  const name = siteName.value.trim()
+  if (!name || Array.from(name).length > 120) {
+    nameError.value = '站点名称需为 1 到 120 个字符。'
+    return
+  }
+  nameBusy.value = true
+  nameError.value = ''
+  try {
+    const result = await saveSiteName(name)
+    siteName.value = result.name
+    emit('nameSaved', result.name)
+  } catch (cause) {
+    if (cause instanceof AdminAuthError) {
+      emit('authExpired')
+      emit('close')
+    } else {
+      nameError.value = cause instanceof Error ? cause.message : '保存失败，请稍后重试。'
+    }
+  } finally {
+    nameBusy.value = false
+  }
+}
+
 async function submit(): Promise<void> {
-  if (busy.value) {
+  if (busy.value || nameBusy.value) {
     return
   }
   busy.value = true
@@ -85,32 +120,52 @@ async function submit(): Promise<void> {
     @cancel.prevent="close"
     @click="($event.target === dialog) && close()"
   >
-    <form class="dialog-form" @submit.prevent="submit">
-      <h2 id="theme-dialog-title">站点主题</h2>
-      <p class="form-hint">主题对所有访客生效。</p>
-      <fieldset class="theme-options" :disabled="busy">
-        <legend class="visually-hidden">选择主题</legend>
-        <label
-          v-for="theme in themes"
-          :key="theme.value"
-          class="theme-option"
-          :class="{ selected: selection === theme.value }"
-        >
-          <input v-model="selection" type="radio" name="site-theme" :value="theme.value" />
-          <span class="theme-preview" :class="`theme-preview-${theme.value}`" aria-hidden="true">
-            <span class="theme-preview-light"><b>Aa</b><i></i><i></i></span>
-            <span class="theme-preview-dark"><b>Aa</b><i></i><i></i></span>
-          </span>
-          <span class="theme-option-name">{{ theme.name }}</span>
-        </label>
-      </fieldset>
-      <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-      <div class="dialog-actions">
-        <button type="button" class="button" :disabled="busy" @click="close">取消</button>
-        <button type="submit" class="button button-primary" :disabled="busy">
-          {{ busy ? '保存中' : '保存' }}
-        </button>
-      </div>
-    </form>
+    <div class="dialog-body site-settings">
+      <h2 id="theme-dialog-title">站点设置</h2>
+      <form class="site-name-form" @submit.prevent="submitName">
+        <label class="field-label" for="site-name">站点名称</label>
+        <div class="site-name-controls">
+          <input
+            id="site-name"
+            ref="nameInput"
+            v-model="siteName"
+            class="text-input"
+            :disabled="busy || nameBusy"
+            autocomplete="off"
+          />
+          <button type="submit" class="button" :disabled="busy || nameBusy">
+            {{ nameBusy ? '保存中' : '保存名称' }}
+          </button>
+        </div>
+        <p v-if="nameError" class="form-error" role="alert">{{ nameError }}</p>
+      </form>
+      <form class="site-theme-form" @submit.prevent="submit">
+        <p class="field-label">站点主题</p>
+        <p class="form-hint">主题对所有访客生效。</p>
+        <fieldset class="theme-options" :disabled="busy || nameBusy">
+          <legend class="visually-hidden">选择主题</legend>
+          <label
+            v-for="theme in themes"
+            :key="theme.value"
+            class="theme-option"
+            :class="{ selected: selection === theme.value }"
+          >
+            <input v-model="selection" type="radio" name="site-theme" :value="theme.value" />
+            <span class="theme-preview" :class="`theme-preview-${theme.value}`" aria-hidden="true">
+              <span class="theme-preview-light"><b>Aa</b><i></i><i></i></span>
+              <span class="theme-preview-dark"><b>Aa</b><i></i><i></i></span>
+            </span>
+            <span class="theme-option-name">{{ theme.name }}</span>
+          </label>
+        </fieldset>
+        <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+        <div class="dialog-actions">
+          <button type="button" class="button" :disabled="busy || nameBusy" @click="close">关闭</button>
+          <button type="submit" class="button button-primary" :disabled="busy || nameBusy">
+            {{ busy ? '保存中' : '保存主题' }}
+          </button>
+        </div>
+      </form>
+    </div>
   </dialog>
 </template>
